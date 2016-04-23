@@ -1,54 +1,60 @@
 [ru]
+AES_TAG = ^1[^4AES^1]
+AES_TAG_MENU = \r[\yAES\r]\w
+AES_TAG_CON = [AES]
+
 TITLE = Выберите игрока
 TITLE_ACT = Действие над
 ADD_EXP = Добавить опыт
-ADD_EXP_ITEM = Добавить \y%d\w опыта
-SUB_EXP_ITEM = Отнять \y%d\w опыта
-SUB_EXP = Отнять опыт
-SET_EXP = Задать опыт^n
+ADD_EXP_ITEM = Добавить \y%s\w опыта
+SUB_EXP_ITEM = Отнять \y%s\w опыта
+SUB_EXP = Отнять опыт^n
+SET_EXP = Задать опыт
+SET_BONUSES = Задать бонусы
 EXP_SELF = Ввести своё значение
 SET_LEVEL = Задать уровень
-SET_BONUSES = Задать бонусы
 CUR_LEVEL = \y(сейчас)
-EXP_TEXT = ^n%s^nОпыт: \y%d/%d\w^nУровень: \y%d\w [ \r%s\w ]^nБонусы: \r%d\w
+EXP_TEXT = ^n%s^nОпыт: \y%s/%s\w^nУровень: \y%d\w [ \r%s\w ]^nБонусы: \y%d\w
 
-ACT_ADD_EXP = %s добавил вам %s опыта.
-ACT_SUB_EXP = %s вычел у вас %s опыта.
-ACT_SET_BONUS = %s выдал %s бонусов вам.
-ACT_SET_LEVEL = %s назначил вам звание %s.
+ACT_ADD_EXP = ^3%s^1 добавил вам ^4%s^1 опыта.
+ACT_SUB_EXP = ^3%s^1 вычел у вас ^4%s^1 опыта.
+ACT_SET_BONUS = ^3%s^1 выдал ^4%s^1 бонусов вам.
+ACT_SET_LEVEL = ^3%s^1 назначил вам звание ^4%s^1.
 
-ACT_ADD_EXP_S = Вы добавили %s опыта %s.
-ACT_ADD_EXP_S = Вы забрали %s опыта у %s.
-ACT_ADD_EXP_S = Вы выдали %s бонусов для %s.
-ACT_ADD_EXP_S = Вы установили звание %s для %s.
+ACT_ADD_EXP_S = Вы добавили ^4%s^1 опыта ^3%s^1.
+ACT_ADD_EXP_S = Вы забрали ^4%s^1 опыта у ^3%s^1.
+ACT_ADD_EXP_S = Вы установили звание ^4%s^1 для ^3%s^1.
 
-ACT_CON_EXP = %s теперь имеет %d опыта.
+ACT_CON_EXP = %s теперь имеет %s опыта.
 ACT_CON_LEVEL = %s теперь %s.
 ACT_WRONG = Что-то пошло не так...
 
 [en]
+AES_TAG = ^1[^4AES^1]
+AES_TAG_MENU = \r[\yAES\r]\w
+AES_TAG_CON = [AES]
+
 TITLE = Select player
 TITLE_ACT = Edit
 ADD_EXP = Add experience
-ADD_EXP_ITEM = Add \y%d\w exp
-SUB_EXP_ITEM = Sub \y%d\w exp
-SUB_EXP = Subtract experience
-SET_EXP = Set experience^n
+ADD_EXP_ITEM = Add \y%s\w exp
+SUB_EXP_ITEM = Sub \y%s\w exp
+SUB_EXP = Subtract experience^n
+SET_EXP = Set experience
+SET_BONUSES = Set bonus points
 EXP_SELF = Input experience value
 SET_LEVEL = Set level
-SET_BONUSES = Set bonuses
 CUR_LEVEL = \y(current)
-EXP_TEXT = ^n%s^nExp: \y%d/%d\w^nLevel: \y%d\w [ \r%s\w ]^nBonuses: \r%d\w
+EXP_TEXT = ^n%s^nExp: \y%s/%s\w^nLevel: \y%d\w [ \r%s\w ]^nБонусы: \y%d\w
 
-ACT_ADD_EXP = %s added %s experience for your.
-ACT_SUB_EXP = %s substracted %s experience from you.
-ACT_SET_BONUS = %s give you %s bonuses.
-ACT_SET_LEVEL = %s set your rank %s.
+ACT_ADD_EXP = ^3%s^1 added ^4%s^1 experience for your.
+ACT_SUB_EXP = ^3%s^1 substracted ^4%s^1 experience from you.
+ACT_SET_LEVEL = ^3%s^1 set your rank ^4%s^1.
 
-ACT_ADD_EXP_S = You add %s experience for %s.
-ACT_ADD_EXP_S = You subtract %s experience from %s.
-ACT_ADD_EXP_S = You add %s bonuses for %s.
-ACT_ADD_EXP_S = You set rank %s for %s.
+ACT_ADD_EXP_S = You add ^4%s^1 experience for ^3%s^1.
+ACT_ADD_EXP_S = You subtract ^4%s^1 experience from ^3%s^1.
+ACT_ADD_EXP_S = You add ^4%s^1 bonuses for ^3%s^1.
+ACT_ADD_EXP_S = You set rank ^4%s^1 for ^3%s^1.
 
 ACT_CON_EXP = %s is now has %d exp.
 ACT_CON_LEVEL = %s is now %s.

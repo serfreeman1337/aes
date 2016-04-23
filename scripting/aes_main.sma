@@ -13,30 +13,30 @@
 #define LASTUPDATE "23, April (04), 2016"
 
 //
-// Основано на CSstatsX SQL
+// РћСЃРЅРѕРІР°РЅРѕ РЅР° CSstatsX SQL
 // http://1337.uz/csstatsx-sql/
 //
 
-// -- КОНСТАНТЫ -- //
+// -- РљРћРќРЎРўРђРќРўР« -- //
 
-enum _:sql_que_type	// тип sql запроса
+enum _:sql_que_type	// С‚РёРї sql Р·Р°РїСЂРѕСЃР°
 {
 	SQL_DUMMY,
-	SQL_LOAD,	// загрузка статистики
-	SQL_UPDATE,	// обновление
-	SQL_INSERT,	// внесение новой записи
-	SQL_UPDATERANK,	// получение ранков игроков,
-	SQL_GETSTATS	// потоквый запрос на get_stats
+	SQL_LOAD,	// Р·Р°РіСЂСѓР·РєР° СЃС‚Р°С‚РёСЃС‚РёРєРё
+	SQL_UPDATE,	// РѕР±РЅРѕРІР»РµРЅРёРµ
+	SQL_INSERT,	// РІРЅРµСЃРµРЅРёРµ РЅРѕРІРѕР№ Р·Р°РїРёСЃРё
+	SQL_UPDATERANK,	// РїРѕР»СѓС‡РµРЅРёРµ СЂР°РЅРєРѕРІ РёРіСЂРѕРєРѕРІ,
+	SQL_GETSTATS	// РїРѕС‚РѕРєРІС‹Р№ Р·Р°РїСЂРѕСЃ РЅР° get_stats
 }
 
-enum _:load_state_type	// состояние получение статистики
+enum _:load_state_type	// СЃРѕСЃС‚РѕСЏРЅРёРµ РїРѕР»СѓС‡РµРЅРёРµ СЃС‚Р°С‚РёСЃС‚РёРєРё
 {
-	LOAD_NO,	// данных нет
-	LOAD_WAIT,	// ожидание данных
-	LOAD_OK,	// есть данные
-	LOAD_NEW,	// новая запись
-	LOAD_NEWWAIT,	// новая запись, ждем ответа
-	LOAD_UPDATE	// перезагрузить после обновления
+	LOAD_NO,	// РґР°РЅРЅС‹С… РЅРµС‚
+	LOAD_WAIT,	// РѕР¶РёРґР°РЅРёРµ РґР°РЅРЅС‹С…
+	LOAD_OK,	// РµСЃС‚СЊ РґР°РЅРЅС‹Рµ
+	LOAD_NEW,	// РЅРѕРІР°СЏ Р·Р°РїРёСЃСЊ
+	LOAD_NEWWAIT,	// РЅРѕРІР°СЏ Р·Р°РїРёСЃСЊ, Р¶РґРµРј РѕС‚РІРµС‚Р°
+	LOAD_UPDATE	// РїРµСЂРµР·Р°РіСЂСѓР·РёС‚СЊ РїРѕСЃР»Рµ РѕР±РЅРѕРІР»РµРЅРёСЏ
 }
 
 enum _:cvars
@@ -57,24 +57,24 @@ enum _:cvars
 
 enum _:player_data_struct
 {
-	PLAYER_ID,				// id игрока БД
-	PLAYER_LOADSTATE,			// состояние загрузки статистики игрока
+	PLAYER_ID,				// id РёРіСЂРѕРєР° Р‘Р”
+	PLAYER_LOADSTATE,			// СЃРѕСЃС‚РѕСЏРЅРёРµ Р·Р°РіСЂСѓР·РєРё СЃС‚Р°С‚РёСЃС‚РёРєРё РёРіСЂРѕРєР°
 	
-	Float:PLAYER_EXP,			// тек. опыт игрока	
-	Float:PLAYER_EXPLAST,			// последний опыт игрока
-	PLAYER_BONUS,				// бонусы игрока
-	PLAYER_BONUSLAST,			// последнее кол-во бонусов
+	Float:PLAYER_EXP,			// С‚РµРє. РѕРїС‹С‚ РёРіСЂРѕРєР°	
+	Float:PLAYER_EXPLAST,			// РїРѕСЃР»РµРґРЅРёР№ РѕРїС‹С‚ РёРіСЂРѕРєР°
+	PLAYER_BONUS,				// Р±РѕРЅСѓСЃС‹ РёРіСЂРѕРєР°
+	PLAYER_BONUSLAST,			// РїРѕСЃР»РµРґРЅРµРµ РєРѕР»-РІРѕ Р±РѕРЅСѓСЃРѕРІ
 	
-	PLAYER_NAME[MAX_NAME_LENGTH * 3],	// ник игрока
-	PLAYER_STEAMID[30],			// steamid игрока
-	PLAYER_IP[16],				// ip игрока
+	PLAYER_NAME[MAX_NAME_LENGTH * 3],	// РЅРёРє РёРіСЂРѕРєР°
+	PLAYER_STEAMID[30],			// steamid РёРіСЂРѕРєР°
+	PLAYER_IP[16],				// ip РёРіСЂРѕРєР°
 	
-	PLAYER_LEVEL,				// уровень игрока
-	Float:PLAYER_LEVELEXP,			// опыт для уровня
-	Float:PLAYER_EXP_TO_NEXT		// требуемое кол-во опыта для сл. уровня игроку
+	PLAYER_LEVEL,				// СѓСЂРѕРІРµРЅСЊ РёРіСЂРѕРєР°
+	Float:PLAYER_LEVELEXP,			// РѕРїС‹С‚ РґР»СЏ СѓСЂРѕРІРЅСЏ
+	Float:PLAYER_EXP_TO_NEXT		// С‚СЂРµР±СѓРµРјРѕРµ РєРѕР»-РІРѕ РѕРїС‹С‚Р° РґР»СЏ СЃР». СѓСЂРѕРІРЅСЏ РёРіСЂРѕРєСѓ
 }
 
-enum _:row_ids		// столбцы таблицы
+enum _:row_ids		// СЃС‚РѕР»Р±С†С‹ С‚Р°Р±Р»РёС†С‹
 {
 	ROW_ID,
 	ROW_NAME,
@@ -93,7 +93,7 @@ enum _:
 	RT_LEVEL_UP
 }
 
-new const row_names[row_ids][] = // имена столбцов
+new const row_names[row_ids][] = // РёРјРµРЅР° СЃС‚РѕР»Р±С†РѕРІ
 {
 	"id",
 	"name",
@@ -106,7 +106,7 @@ new const row_names[row_ids][] = // имена столбцов
 
 const QUERY_LENGTH =	1472
 
-// -- ПЕРЕМЕННЫЕ --
+// -- РџР•Р Р•РњР•РќРќР«Р• --
 new player_data[MAX_PLAYERS + 1][player_data_struct]
 new cvar[cvars]
 
@@ -130,7 +130,7 @@ public plugin_init()
 	server_print("")
 	
 	//
-	// Квары настройки подключения
+	// РљРІР°СЂС‹ РЅР°СЃС‚СЂРѕР№РєРё РїРѕРґРєР»СЋС‡РµРЅРёСЏ
 	//
 	cvar[CVAR_SQL_TYPE] = register_cvar("aes_sql_driver","sqlite")
 	cvar[CVAR_SQL_HOST] = register_cvar("aes_sql_host","",FCVAR_UNLOGGED|FCVAR_PROTECTED)
@@ -177,7 +177,7 @@ public plugin_cfg()
 	{
 		SQL_SetAffinity(db_type)
 		
-		// формируем запрос на создание таблицы
+		// С„РѕСЂРјРёСЂСѓРµРј Р·Р°РїСЂРѕСЃ РЅР° СЃРѕР·РґР°РЅРёРµ С‚Р°Р±Р»РёС†С‹
 		formatex(query,charsmax(query),"\
 				CREATE TABLE IF NOT EXISTS `%s` (\
 					`%s`	INTEGER PRIMARY KEY AUTOINCREMENT,\
@@ -200,14 +200,14 @@ public plugin_cfg()
 				row_names[ROW_LASTUPDATE]
 		)
 	}
-	else // привет wopox
+	else // РїСЂРёРІРµС‚ wopox
 	{
 		set_fail_state("invalid ^"aes_sql_driver^" cvar value")
 	}
 	
 	sql = SQL_MakeDbTuple(host,user,pass,db)
 	
-	// отправляем запрос на создание таблицы
+	// РѕС‚РїСЂР°РІР»СЏРµРј Р·Р°РїСЂРѕСЃ РЅР° СЃРѕР·РґР°РЅРёРµ С‚Р°Р±Р»РёС†С‹
 	if(get_pcvar_num(cvar[CVAR_SQL_CREATE_DB]))
 	{
 		new sql_data[1]
@@ -279,7 +279,7 @@ public t7(id)
 }
 
 //
-// Загружаем статистику из БД при подключении игрока
+// Р—Р°РіСЂСѓР¶Р°РµРј СЃС‚Р°С‚РёСЃС‚РёРєСѓ РёР· Р‘Р” РїСЂРё РїРѕРґРєР»СЋС‡РµРЅРёРё РёРіСЂРѕРєР°
 //
 public client_putinserver(id)
 {
@@ -288,7 +288,7 @@ public client_putinserver(id)
 }
 
 //
-// Сохраняем данные на дисконнекте
+// РЎРѕС…СЂР°РЅСЏРµРј РґР°РЅРЅС‹Рµ РЅР° РґРёСЃРєРѕРЅРЅРµРєС‚Рµ
 //
 public client_disconnect(id)
 {
@@ -296,7 +296,7 @@ public client_disconnect(id)
 }
 
 //
-// Смена ника игрока
+// РЎРјРµРЅР° РЅРёРєР° РёРіСЂРѕРєР°
 //
 public client_infochanged(id)
 {
@@ -317,29 +317,29 @@ public client_infochanged(id)
 }
 
 //
-// Задаем опыт игроку
+// Р—Р°РґР°РµРј РѕРїС‹С‚ РёРіСЂРѕРєСѓ
 //
 Player_SetExp(id,Float:new_exp,bool:no_forward = false,bool:force = false)
 {
-	// опыт не может быть отрицательным
+	// РѕРїС‹С‚ РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РѕС‚СЂРёС†Р°С‚РµР»СЊРЅС‹Рј
 	if(new_exp < 0.0)
 		new_exp = 0.0
 	
 	player_data[id][PLAYER_EXP] = new_exp
 	new rt = RT_OK
 	
-	// понижение по уровню
+	// РїРѕРЅРёР¶РµРЅРёРµ РїРѕ СѓСЂРѕРІРЅСЋ
 	if(new_exp < player_data[id][PLAYER_EXP_TO_NEXT])
 	{
 		rt = RT_LEVEL_DOWN
 	}
-	// повышение по уровню
+	// РїРѕРІС‹С€РµРЅРёРµ РїРѕ СѓСЂРѕРІРЅСЋ
 	else if(new_exp >= player_data[id][PLAYER_EXP_TO_NEXT])
 	{
 		rt = RT_LEVEL_UP
 	}
 	
-	// расчитываем новый уровень
+	// СЂР°СЃС‡РёС‚С‹РІР°РµРј РЅРѕРІС‹Р№ СѓСЂРѕРІРµРЅСЊ
 	if(rt != RT_OK)
 	{
 		new old_level = player_data[id][PLAYER_LEVEL]
@@ -377,7 +377,7 @@ Player_SetExp(id,Float:new_exp,bool:no_forward = false,bool:force = false)
 }
 
 //
-// Задаем бонусы игрока
+// Р—Р°РґР°РµРј Р±РѕРЅСѓСЃС‹ РёРіСЂРѕРєР°
 //
 Player_SetBonus(id,bonus,bool:force = false)
 {
@@ -386,7 +386,7 @@ Player_SetBonus(id,bonus,bool:force = false)
 }
 
 //
-// Задаем уровень игроку
+// Р—Р°РґР°РµРј СѓСЂРѕРІРµРЅСЊ РёРіСЂРѕРєСѓ
 //
 Player_SetLevel(id,level,bool:force = false)
 {
@@ -406,13 +406,13 @@ Player_SetLevel(id,level,bool:force = false)
 }
 
 //
-// Функция возвращается текущий уровень по значению опыта
+// Р¤СѓРЅРєС†РёСЏ РІРѕР·РІСЂР°С‰Р°РµС‚СЃСЏ С‚РµРєСѓС‰РёР№ СѓСЂРѕРІРµРЅСЊ РїРѕ Р·РЅР°С‡РµРЅРёСЋ РѕРїС‹С‚Р°
 //
 Level_GetByExp(Float:exp)
 {
 	for(new i ; i < levels_count ; i++)
 	{
-		// ищем уровень по опыту
+		// РёС‰РµРј СѓСЂРѕРІРµРЅСЊ РїРѕ РѕРїС‹С‚Сѓ
 		if(exp < ArrayGetCell(levels_list,i))
 		{
 			server_print("--> [LIST] %d %d %.2f",
@@ -423,31 +423,31 @@ Level_GetByExp(Float:exp)
 		}
 	}
 	
-	// возвращаем максимальный уровень
+	// РІРѕР·РІСЂР°С‰Р°РµРј РјР°РєСЃРёРјР°Р»СЊРЅС‹Р№ СѓСЂРѕРІРµРЅСЊ
 	return levels_count - 1
 }
 
 //
-// Функция возвращает необходимый опыт до сл. уровня
+// Р¤СѓРЅРєС†РёСЏ РІРѕР·РІСЂР°С‰Р°РµС‚ РЅРµРѕР±С…РѕРґРёРјС‹Р№ РѕРїС‹С‚ РґРѕ СЃР». СѓСЂРѕРІРЅСЏ
 //
 Float:Level_GetExpToNext(level)
 {
 	level ++
 	
-	// достигнут максимальный уровень
+	// РґРѕСЃС‚РёРіРЅСѓС‚ РјР°РєСЃРёРјР°Р»СЊРЅС‹Р№ СѓСЂРѕРІРµРЅСЊ
 	if(level >= levels_count)
 	{
 		return -1.0
 	}
 
-	// TODO: проверки
+	// TODO: РїСЂРѕРІРµСЂРєРё
 	level = clamp(level,0,levels_count - 1)
 	
 	return ArrayGetCell(levels_list,level)
 }
 
 //
-// Функция возвращает опыт для указанного уровня
+// Р¤СѓРЅРєС†РёСЏ РІРѕР·РІСЂР°С‰Р°РµС‚ РѕРїС‹С‚ РґР»СЏ СѓРєР°Р·Р°РЅРЅРѕРіРѕ СѓСЂРѕРІРЅСЏ
 //
 Float:Level_GetExp(level)
 {
@@ -458,17 +458,17 @@ Float:Level_GetExp(level)
 }
 
 //
-// Загрузка статистики игрока из базы данных
+// Р—Р°РіСЂСѓР·РєР° СЃС‚Р°С‚РёСЃС‚РёРєРё РёРіСЂРѕРєР° РёР· Р±Р°Р·С‹ РґР°РЅРЅС‹С…
 //
 DB_LoadPlayerData(id)
 {
-	// пропускаем HLTV
+	// РїСЂРѕРїСѓСЃРєР°РµРј HLTV
 	if(is_user_hltv(id))
 	{
 		return false
 	}
 	
-	// пропускаем ботов, если отключена запись статистики ботов
+	// РїСЂРѕРїСѓСЃРєР°РµРј Р±РѕС‚РѕРІ, РµСЃР»Рё РѕС‚РєР»СЋС‡РµРЅР° Р·Р°РїРёСЃСЊ СЃС‚Р°С‚РёСЃС‚РёРєРё Р±РѕС‚РѕРІ
 	if(!get_pcvar_num(cvar[CVAR_RANKBOTS]) && is_user_bot(id))
 	{
 		return false
@@ -480,7 +480,7 @@ DB_LoadPlayerData(id)
 	get_user_authid(id,player_data[id][PLAYER_STEAMID],charsmax(player_data[][PLAYER_STEAMID]))
 	get_user_ip(id,player_data[id][PLAYER_IP],charsmax(player_data[][PLAYER_IP]),true)
 	
-	// формируем SQL запрос
+	// С„РѕСЂРјРёСЂСѓРµРј SQL Р·Р°РїСЂРѕСЃ
 	new query[QUERY_LENGTH],len,sql_data[2]
 	
 	sql_data[0] = SQL_LOAD
@@ -491,19 +491,19 @@ DB_LoadPlayerData(id)
 	
 	switch(get_pcvar_num(cvar[CVAR_RANK]))
 	{
-		case 0: // статистика по нику
+		case 0: // СЃС‚Р°С‚РёСЃС‚РёРєР° РїРѕ РЅРёРєСѓ
 		{
 			len += formatex(query[len],charsmax(query)-len," FROM `%s` WHERE `name` = '%s'",
 				tbl_name,player_data[id][PLAYER_NAME]
 			)
 		}
-		case 1: // статистика по steamid
+		case 1: // СЃС‚Р°С‚РёСЃС‚РёРєР° РїРѕ steamid
 		{
 			len += formatex(query[len],charsmax(query)-len," FROM `%s` WHERE `steamid` = '%s'",
 				tbl_name,player_data[id][PLAYER_STEAMID]
 			)
 		}
-		case 2: // статистика по ip
+		case 2: // СЃС‚Р°С‚РёСЃС‚РёРєР° РїРѕ ip
 		{
 			len += formatex(query[len],charsmax(query)-len," FROM `%s` WHERE `ip` = '%s'",
 				tbl_name,player_data[id][PLAYER_IP]
@@ -515,18 +515,18 @@ DB_LoadPlayerData(id)
 		}
 	}
 	
-	// отправка потокового запроса
+	// РѕС‚РїСЂР°РІРєР° РїРѕС‚РѕРєРѕРІРѕРіРѕ Р·Р°РїСЂРѕСЃР°
 	SQL_ThreadQuery(sql,"SQL_Handler",query,sql_data,sizeof sql_data)
 	
 	return true
 }
 
 //
-// Сохранение статистики игрока
+// РЎРѕС…СЂР°РЅРµРЅРёРµ СЃС‚Р°С‚РёСЃС‚РёРєРё РёРіСЂРѕРєР°
 //
 DB_SavePlayerData(id,bool:reload = false)
 {
-	if(player_data[id][PLAYER_LOADSTATE] < LOAD_OK) // игрок не загрузился
+	if(player_data[id][PLAYER_LOADSTATE] < LOAD_OK) // РёРіСЂРѕРє РЅРµ Р·Р°РіСЂСѓР·РёР»СЃСЏ
 	{
 		return false
 	}
@@ -538,7 +538,7 @@ DB_SavePlayerData(id,bool:reload = false)
 	
 	switch(player_data[id][PLAYER_LOADSTATE])
 	{
-		case LOAD_OK: // обновление данных
+		case LOAD_OK: // РѕР±РЅРѕРІР»РµРЅРёРµ РґР°РЅРЅС‹С…
 		{
 			if(reload)
 			{
@@ -582,7 +582,7 @@ DB_SavePlayerData(id,bool:reload = false)
 				to_save ++
 			}
 			
-			// обновляем время последнего подключения, ник, ип и steamid
+			// РѕР±РЅРѕРІР»СЏРµРј РІСЂРµРјСЏ РїРѕСЃР»РµРґРЅРµРіРѕ РїРѕРґРєР»СЋС‡РµРЅРёСЏ, РЅРёРє, РёРї Рё steamid
 			len += formatex(query[len],charsmax(query) - len,",\
 				`%s` = CURRENT_TIMESTAMP,\
 				`%s` = '%s',\
@@ -593,7 +593,7 @@ DB_SavePlayerData(id,bool:reload = false)
 				row_names[ROW_IP],player_data[id][PLAYER_IP]
 			)
 			
-			if(!reload) // не обновляем ник при его смене
+			if(!reload) // РЅРµ РѕР±РЅРѕРІР»СЏРµРј РЅРёРє РїСЂРё РµРіРѕ СЃРјРµРЅРµ
 			{
 				len += formatex(query[len],charsmax(query) - len,",`%s` = '%s'",
 					row_names[ROW_NAME],player_data[id][PLAYER_NAME]
@@ -602,9 +602,9 @@ DB_SavePlayerData(id,bool:reload = false)
 			
 			len += formatex(query[len],charsmax(query) - len,"WHERE `%s` = '%d'",row_names[ROW_ID],player_data[id][PLAYER_ID])
 			
-			if(!to_save) // нечего сохранять
+			if(!to_save) // РЅРµС‡РµРіРѕ СЃРѕС…СЂР°РЅСЏС‚СЊ
 			{
-				// я обманул. азазаза
+				// СЏ РѕР±РјР°РЅСѓР». Р°Р·Р°Р·Р°Р·Р°
 				if(player_data[id][PLAYER_LOADSTATE] == LOAD_UPDATE)
 				{
 					player_data[id][PLAYER_LOADSTATE] = LOAD_NO
@@ -614,7 +614,7 @@ DB_SavePlayerData(id,bool:reload = false)
 				return false
 			}
 		}
-		case LOAD_NEW: // запрос на добавление новой записи
+		case LOAD_NEW: // Р·Р°РїСЂРѕСЃ РЅР° РґРѕР±Р°РІР»РµРЅРёРµ РЅРѕРІРѕР№ Р·Р°РїРёСЃРё
 		{
 			sql_data[0] = SQL_INSERT
 			
@@ -658,7 +658,7 @@ DB_SavePlayerData(id,bool:reload = false)
 }
 
 //
-// Хандлер SQL ответа
+// РҐР°РЅРґР»РµСЂ SQL РѕС‚РІРµС‚Р°
 //
 public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 	switch(failstate)
@@ -673,7 +673,7 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 		case TQUERY_QUERY_FAILED:
 		{
 			new lastQue[QUERY_LENGTH]
-			SQL_GetQueryString(sqlQue,lastQue,charsmax(lastQue)) // узнаем запрос
+			SQL_GetQueryString(sqlQue,lastQue,charsmax(lastQue)) // СѓР·РЅР°РµРј Р·Р°РїСЂРѕСЃ
 			
 			log_amx("SQL query failed")
 			log_amx("[ %d ] %s",errNum,err)
@@ -685,7 +685,7 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 	
 	switch(data[0])
 	{
-		case SQL_LOAD: // загрзука статистики игрока
+		case SQL_LOAD: // Р·Р°РіСЂР·СѓРєР° СЃС‚Р°С‚РёСЃС‚РёРєРё РёРіСЂРѕРєР°
 		{
 			new id = data[1]
 		
@@ -694,7 +694,7 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 				return PLUGIN_HANDLED
 			}
 			
-			if(SQL_NumResults(sqlQue)) // считываем статистику
+			if(SQL_NumResults(sqlQue)) // СЃС‡РёС‚С‹РІР°РµРј СЃС‚Р°С‚РёСЃС‚РёРєСѓ
 			{
 				player_data[id][PLAYER_LOADSTATE] = LOAD_OK
 				player_data[id][PLAYER_ID] = SQL_ReadResult(sqlQue,ROW_ID)
@@ -714,16 +714,16 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 					player_data[id][PLAYER_BONUS]
 				)
 			}
-			else // помечаем как нового игрока
+			else // РїРѕРјРµС‡Р°РµРј РєР°Рє РЅРѕРІРѕРіРѕ РёРіСЂРѕРєР°
 			{
 				player_data[id][PLAYER_LOADSTATE] = LOAD_NEW
 				
-				DB_SavePlayerData(id) // добавляем запись в базу данных
+				DB_SavePlayerData(id) // РґРѕР±Р°РІР»СЏРµРј Р·Р°РїРёСЃСЊ РІ Р±Р°Р·Сѓ РґР°РЅРЅС‹С…
 				
 				log_amx("SELECT NEW")
 			}
 		}
-		case SQL_INSERT:	// запись новых данных
+		case SQL_INSERT:	// Р·Р°РїРёСЃСЊ РЅРѕРІС‹С… РґР°РЅРЅС‹С…
 		{
 			new id = data[1]
 			
@@ -737,10 +737,10 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 					return PLUGIN_HANDLED
 				}
 				
-				player_data[id][PLAYER_ID] = SQL_GetInsertId(sqlQue)	// первичный ключ
-				player_data[id][PLAYER_LOADSTATE] = LOAD_OK		// данные загружены
+				player_data[id][PLAYER_ID] = SQL_GetInsertId(sqlQue)	// РїРµСЂРІРёС‡РЅС‹Р№ РєР»СЋС‡
+				player_data[id][PLAYER_LOADSTATE] = LOAD_OK		// РґР°РЅРЅС‹Рµ Р·Р°РіСЂСѓР¶РµРЅС‹
 				
-				// я упрлся 0)0)0
+				// СЏ СѓРїСЂР»СЃСЏ 0)0)0
 				
 				log_amx("INSERT id: %d, exp: %.2f, bonus: %d",
 					player_data[id][PLAYER_ID],
@@ -749,7 +749,7 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 				)
 			}
 		}
-		case SQL_UPDATE: // обновление данных
+		case SQL_UPDATE: // РѕР±РЅРѕРІР»РµРЅРёРµ РґР°РЅРЅС‹С…
 		{
 			new id = data[1]
 			
@@ -805,6 +805,8 @@ public plugin_natives()
 	register_native("aes_get_player_level","_aes_get_player_level",true)
 	register_native("aes_get_max_level","_aes_get_max_level",true)
 	register_native("aes_get_level_name","_aes_get_level_name")
+	register_native("aes_get_exp_level","_aes_get_exp_level",true)
+	register_native("aes_get_level_reqexp","_aes_get_level_reqexp",true)
 	
 	// 0.4 DEPRECATED
 	register_library("aes_main")
@@ -885,8 +887,18 @@ public _aes_get_level_name(plugin,params)
 	return len
 }
 
+public _aes_get_exp_level(Float:exp)
+{
+	return Level_GetByExp(exp)
+}
+
+public Float:_aes_get_level_reqexp(level)
+{
+	return Level_GetExpToNext(level)
+}
+
 //
-// ОБРАТНАЯ СОВМЕСТИМОСТЬ С 0.4
+// РћР‘Р РђРўРќРђРЇ РЎРћР’РњР•РЎРўРРњРћРЎРўР¬ РЎ 0.4
 //
 public _aes_get_stats()
 {
@@ -958,7 +970,7 @@ public _aes_set_player_stats(plugin,params){
 	return 1
 }
 
-// что это за херня D:
+// С‡С‚Рѕ СЌС‚Рѕ Р·Р° С…РµСЂРЅСЏ D:
 public _aes_set_level_exp()
 {
 	return false
