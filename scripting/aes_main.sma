@@ -1,1046 +1,937 @@
-/* 
-	Advanced Experience System
-	by serfreeman1337		http://gf.hldm.org/
-*/
-
 /*
-	- Main Plugin
-	- Storage Engine
+*	Advanced Experience System	     v. 0.5
+*	by serfreeman1337	    http://1337.uz/
 */
 
 #include <amxmodx>
-#include <fakemeta>
 #include <amxmisc>
 #include <sqlx>
 
-#define PLUGIN		"Advanced Experience System"
-#define VERSION		"0.4.1"
-#define AUTHOR		"serfreeman1337"
-#define LASTUPDATE "6, February (02), 2014"
+#define PLUGIN "Advanced Experience System"
+#define VERSION "0.5 Vega"
+#define AUTHOR "serfreeman1337"
+#define LASTUPDATE "23, April (04), 2016"
 
-/* - CVARS - */
+//
+// Основано на CSstatsX SQL
+// http://1337.uz/csstatsx-sql/
+//
 
-enum _:cvars_num {
-	CVAR_DB_TYPE,
-	CVAR_TRACK_MODE,
-	CVAR_LEVELS,
-	CVAR_SAVE_BONUS,
-	
-	CVAR_LOAD_DELAY,
-	
-	CVAR_SQL_DRIVER,
+// -- КОНСТАНТЫ -- //
+
+enum _:sql_que_type	// тип sql запроса
+{
+	SQL_DUMMY,
+	SQL_LOAD,	// загрузка статистики
+	SQL_UPDATE,	// обновление
+	SQL_INSERT,	// внесение новой записи
+	SQL_UPDATERANK,	// получение ранков игроков,
+	SQL_GETSTATS	// потоквый запрос на get_stats
+}
+
+enum _:load_state_type	// состояние получение статистики
+{
+	LOAD_NO,	// данных нет
+	LOAD_WAIT,	// ожидание данных
+	LOAD_OK,	// есть данные
+	LOAD_NEW,	// новая запись
+	LOAD_NEWWAIT,	// новая запись, ждем ответа
+	LOAD_UPDATE	// перезагрузить после обновления
+}
+
+enum _:cvars
+{
+	CVAR_SQL_TYPE,
 	CVAR_SQL_HOST,
 	CVAR_SQL_USER,
-	CVAR_SQL_PASSWORD,
+	CVAR_SQL_PASS,
 	CVAR_SQL_DB,
-	CVAR_SQL_TBL,
-	CVAR_SQL_MAXFAIL,
+	CVAR_SQL_TABLE,
+	CVAR_SQL_CREATE_DB,
 	
-	CVAR_DB_PRUNE
+	CVAR_RANK,
+	CVAR_RANKBOTS,
+	
+	CVAR_LEVELS
 }
 
-new cvar[cvars_num]
-
-/* - CACHED CVARS - */
-
-new g_storagetype,g_trackmode,g_savebonus
-new Float:loadDelay
-
-/* - FILE STORAGE ENGINE - */
-new const stDir[] = "/aes/"
-new const stFile[] = "stats.ini"
-
-/*new const fSVersion = 1337
-
-enum _:StreamData {
-	DATA_UNIQUE[36],
-	DATA_NAME[32],
-	DATA_EXP,
-	DATA_LEVEL,
-	DATA_BONUSES,
-	DATA_LAST_CONNECT,
+enum _:player_data_struct
+{
+	PLAYER_ID,				// id игрока БД
+	PLAYER_LOADSTATE,			// состояние загрузки статистики игрока
 	
-	DATA_END
-}
-*/
-
-new Trie:g_PlayerStats, Trie:g_PlayerNames, Array:g_PlayerStatsId	// all players data info
-
-/* - SQL STORAGE ENGINE - */
-new Handle:g_sql,g_query[512],sqlTable[64],sqlFailCount,bool:sqlFail
-
-enum _:SQL_STATE {
-	LOAD_STATS,
-	SAVE_STATS,
-	DROP_STATS
+	Float:PLAYER_EXP,			// тек. опыт игрока	
+	Float:PLAYER_EXPLAST,			// последний опыт игрока
+	PLAYER_BONUS,				// бонусы игрока
+	PLAYER_BONUSLAST,			// последнее кол-во бонусов
+	
+	PLAYER_NAME[MAX_NAME_LENGTH * 3],	// ник игрока
+	PLAYER_STEAMID[30],			// steamid игрока
+	PLAYER_IP[16],				// ip игрока
+	
+	PLAYER_LEVEL,				// уровень игрока
+	Float:PLAYER_LEVELEXP,			// опыт для уровня
+	Float:PLAYER_EXP_TO_NEXT		// требуемое кол-во опыта для сл. уровня игроку
 }
 
-/* - PLAYER STATS - */
-enum _:player_info {
-	EXP,
-	LEVEL,
-	BONUSES,
-	LAST_CONNECT,
-	LOADED,
-	EXP_TO_NEXT_LEVEL
+enum _:row_ids		// столбцы таблицы
+{
+	ROW_ID,
+	ROW_NAME,
+	ROW_STEAMID,
+	ROW_IP,
+	ROW_EXP,
+	ROW_BONUS,
+	ROW_LASTUPDATE
 }
 
-new g_players[33][player_info],g_maxplayers
-
-/* - LEVELS - */
-new Array:g_Levels,g_maxLevel
-new Trie:g_LevelNames
-
-/* - FORWARDS - */
-new g_LevelUpForward,g_LevelDownForward
-
-public plugin_init(){
-	register_plugin(PLUGIN, VERSION, AUTHOR)
-	
-	register_cvar("aes",VERSION,FCVAR_SERVER|FCVAR_SPONLY|FCVAR_UNLOGGED)
-	
-	// Select storage type
-	// 0 - dont save
-	// 1 - save info into file
-	// 2 - user sql database
-	cvar[CVAR_DB_TYPE] = register_cvar("aes_db_type","1")
-	
-	// How users tracking
-	// 0 - Name
-	// 1 - SteamID
-	// 2 - IP
-	cvar[CVAR_TRACK_MODE] = register_cvar("aes_track_mode","1")
-	
-	// blablaba 22
-	cvar[CVAR_LEVELS] = register_cvar("aes_level","0 20 40 60 100 150 200 300 400 600 1000 1500 2100 2700 3400 4200 5100 5900 7000 10000")
-	
-	cvar[CVAR_SAVE_BONUS] = register_cvar("aes_save_bonus","1")
-	cvar[CVAR_LOAD_DELAY] = register_cvar("aes_load_delay","0.0")
-	
-	cvar[CVAR_SQL_DRIVER] = register_cvar("aes_sql_driver","mysql")
-	cvar[CVAR_SQL_HOST] = register_cvar("aes_sql_host","localhost")
-	cvar[CVAR_SQL_USER] = register_cvar("aes_sql_user","root")
-	cvar[CVAR_SQL_PASSWORD] = register_cvar("aes_sql_password","")
-	cvar[CVAR_SQL_DB] = register_cvar("aes_sql_db","amxx")
-	cvar[CVAR_SQL_TBL] = register_cvar("aes_sql_table","aes_stats")
-	cvar[CVAR_SQL_MAXFAIL] = register_cvar("aes_sql_maxfail","10")
-	
-	cvar[CVAR_DB_PRUNE] = register_cvar("aes_db_prune_days","0")
-	
-	g_maxplayers = get_maxplayers()
-	
-	// id | new level | old level
-	g_LevelUpForward = CreateMultiForward("aes_player_levelup",ET_IGNORE,FP_CELL,FP_CELL,FP_CELL)
-	g_LevelDownForward = CreateMultiForward("aes_player_leveldown",ET_IGNORE,FP_CELL,FP_CELL,FP_CELL)
-	
-	g_Levels = ArrayCreate(10)
-	g_LevelNames = TrieCreate()
-	
-	register_concmd("aes_recalc","Start_ReCalc",ADMIN_RCON," - recalc players levels for their experice")
-	
-	register_forward(FM_Sys_Error,"Server_BSOD")
+enum _:
+{
+	RT_FAIL,
+	RT_OK,
+	RT_LEVEL_DOWN,
+	RT_LEVEL_UP
 }
 
-public plugin_cfg(){
-	new fPath[256]
-	get_configsdir(fPath,255)
-	
-	server_cmd("exec %s/aes/aes.cfg",fPath)
-	server_exec()
-	
-	g_storagetype = get_pcvar_num(cvar[CVAR_DB_TYPE])
-	g_trackmode = get_pcvar_num(cvar[CVAR_TRACK_MODE])
-	loadDelay = get_pcvar_float(cvar[CVAR_LOAD_DELAY])
-	
-	switch(g_storagetype){
-		case 1:{
-			g_PlayerStats = TrieCreate()
-			g_PlayerNames = TrieCreate()
-			g_PlayerStatsId = ArrayCreate(36)
-			
-			LoadDataFromFile()
-		}
-		case 2:{
-			InitSQLDB()
-		}
-	}
-	
-	g_savebonus = get_pcvar_num(cvar[CVAR_SAVE_BONUS])
-	
-	if(g_trackmode == 0){
-		register_forward(FM_ClientUserInfoChanged,"fw_ClientUserInfoChanged")
-	}
-	
-	new levelString[512],stPos,ePos,rawPoint[20]
-	get_pcvar_string(cvar[CVAR_LEVELS],levelString,511)
-	
-	// parse levels entry
-	
-	if(strlen(levelString)){
-		do {
-			ePos = strfind(levelString[stPos]," ")
-			
-			formatex(rawPoint,ePos,levelString[stPos])
-			ArrayPushCell(g_Levels,str_to_num(rawPoint))
-			
-			stPos += ePos + 1
-		} while (ePos != -1)
-	}
-	
-	// get total levels
-	g_maxLevel = ArraySize(g_Levels)
+new const row_names[row_ids][] = // имена столбцов
+{
+	"id",
+	"name",
+	"steamid",
+	"ip",
+	"exp",
+	"bonus_count",
+	"last_update"
+}
+
+const QUERY_LENGTH =	1472
+
+// -- ПЕРЕМЕННЫЕ --
+new player_data[MAX_PLAYERS + 1][player_data_struct]
+new cvar[cvars]
+
+new tbl_name[32]
+new Handle:sql
+
+new Array:levels_list
+new levels_count
+new Float:max_exp
+
+new FW_LevelUp,FW_LevelDown
+new dummy
+
+public plugin_init()
+{
+	register_plugin(PLUGIN,VERSION,AUTHOR)
 	
 	server_print("")
-	server_print("   %s Copyright (c) 2014 %s",PLUGIN,AUTHOR)
+	server_print("   %s Copyright (c) 2016 %s",PLUGIN,AUTHOR)
 	server_print("   Version %s build on %s", VERSION, LASTUPDATE)
 	server_print("")
+	
+	//
+	// Квары настройки подключения
+	//
+	cvar[CVAR_SQL_TYPE] = register_cvar("aes_sql_driver","sqlite")
+	cvar[CVAR_SQL_HOST] = register_cvar("aes_sql_host","",FCVAR_UNLOGGED|FCVAR_PROTECTED)
+	cvar[CVAR_SQL_USER] = register_cvar("aes_sql_user","",FCVAR_UNLOGGED|FCVAR_PROTECTED)
+	cvar[CVAR_SQL_PASS] = register_cvar("aes_sql_pass","",FCVAR_UNLOGGED|FCVAR_PROTECTED)
+	cvar[CVAR_SQL_DB] = register_cvar("aes_sql_name","amxx",FCVAR_UNLOGGED|FCVAR_PROTECTED)
+	cvar[CVAR_SQL_TABLE] = register_cvar("aes_sql_table","aes_stats",FCVAR_UNLOGGED|FCVAR_PROTECTED)
+	
+	cvar[CVAR_SQL_CREATE_DB] = register_cvar("aes_sql_create_db","1")
+	
+	cvar[CVAR_RANK] = register_cvar("aes_track_mode","1")
+	cvar[CVAR_RANKBOTS] = register_cvar("aes_track_bots","1")
+	
+	cvar[CVAR_LEVELS] = register_cvar("aes_level","0 20 40 60 100 150 200 300 400 600 1000 1500 2100 2700 3400 4200 5100 5900 7000 10000")
+
+	FW_LevelUp = CreateMultiForward("aes_player_levelup",ET_IGNORE,FP_CELL,FP_CELL,FP_CELL)
+	FW_LevelDown = CreateMultiForward("aes_player_leveldown",ET_IGNORE,FP_CELL,FP_CELL,FP_CELL)
+	
+	register_dictionary("aes.txt")
 }
 
-public InitSQLDB(){
-	new hostname[64],user[64],password[64],db[64],driver[10]
+public plugin_cfg()
+{
+	new cfg_path[256]
+	get_configsdir(cfg_path,charsmax(cfg_path))
 	
-	get_pcvar_string(cvar[CVAR_SQL_HOST],hostname,63)
-	get_pcvar_string(cvar[CVAR_SQL_USER],user,63)
-	get_pcvar_string(cvar[CVAR_SQL_PASSWORD],password,63)
-	get_pcvar_string(cvar[CVAR_SQL_DB],db,63)
-	get_pcvar_string(cvar[CVAR_SQL_TBL],sqlTable,63)
-	get_pcvar_string(cvar[CVAR_SQL_DRIVER],driver,9)
+	server_cmd("exec %s/aes/aes.cfg",cfg_path)
+	server_exec()
 	
-	SQL_SetAffinity(driver)
-	g_sql = SQL_MakeDbTuple(hostname,user,password,db)
+	new db_type[12]
+	get_pcvar_string(cvar[CVAR_SQL_TYPE],db_type,charsmax(db_type))
 	
-	if(g_sql == Empty_Handle){
-		log_amx("failed to initialize database")
+	new host[128],user[64],pass[64],db[64],type[10]
+	get_pcvar_string(cvar[CVAR_SQL_HOST],host,charsmax(host))
+	get_pcvar_string(cvar[CVAR_SQL_USER],user,charsmax(user))
+	get_pcvar_string(cvar[CVAR_SQL_PASS],pass,charsmax(pass))
+	get_pcvar_string(cvar[CVAR_SQL_DB],db,charsmax(db))
+	get_pcvar_string(cvar[CVAR_SQL_TABLE],tbl_name,charsmax(tbl_name))
+	get_pcvar_string(cvar[CVAR_SQL_TYPE],type,charsmax(type))
+	
+	new query[QUERY_LENGTH]
+	
+	if(strcmp(db_type,"sqlite") == 0)
+	{
+		SQL_SetAffinity(db_type)
 		
-		sqlFail = true
+		// формируем запрос на создание таблицы
+		formatex(query,charsmax(query),"\
+				CREATE TABLE IF NOT EXISTS `%s` (\
+					`%s`	INTEGER PRIMARY KEY AUTOINCREMENT,\
+					`%s`	TEXT,\
+					`%s`	TEXT,\
+					`%s`	TEXT,\
+					`%s`	REAL NOT NULL DEFAULT 0.0,\
+					`%s`	INTEGER NOT NULL DEFAULT 0,\
+					`%s`	TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\
+				);",
+				
+				tbl_name,
+				
+				row_names[ROW_ID],
+				row_names[ROW_NAME],
+				row_names[ROW_STEAMID],
+				row_names[ROW_IP],
+				row_names[ROW_EXP],
+				row_names[ROW_BONUS],
+				row_names[ROW_LASTUPDATE]
+		)
+	}
+	else // привет wopox
+	{
+		set_fail_state("invalid ^"aes_sql_driver^" cvar value")
 	}
 	
-	formatex(g_query,511,"CREATE TABLE IF NOT EXISTS `%s` (\
-  `id` int(11) NOT NULL AUTO_INCREMENT,\
-  `trackId` varchar(36) NOT NULL,\
-  `name` varchar(32) NOT NULL,\
-  `experience` int(11) NOT NULL,\
-  `level` int(11) NOT NULL,\
-  `bonus` int(11) NOT NULL,\
-  `lastJoin` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\
-  PRIMARY KEY (`id`))",sqlTable)
-  
-	new data[2]
-	data[1] = -1
+	sql = SQL_MakeDbTuple(host,user,pass,db)
 	
-	SQL_ThreadQuery(g_sql,"SQL_Handler",g_query,data,2)
-	
-	if(get_pcvar_num(cvar[CVAR_DB_PRUNE]) > 0){
-		new data[2]
-		data[1] = DROP_STATS
-		formatex(g_query,511,"SELECT `id` FROM `%s` WHERE DATE_ADD(`lastJoin`, INTERVAL %d DAY) <= NOW()",
-			sqlTable,get_pcvar_num(cvar[CVAR_DB_PRUNE]))
-		SQL_ThreadQuery(g_sql,"SQL_Handler",g_query,data,2)
+	// отправляем запрос на создание таблицы
+	if(get_pcvar_num(cvar[CVAR_SQL_CREATE_DB]))
+	{
+		new sql_data[1]
+		sql_data[0] = SQL_DUMMY
+		
+		SQL_ThreadQuery(sql,"SQL_Handler",query,sql_data,sizeof sql_data)
 	}
+	
+	
+	new levels_string[512],level_str[10]
+	get_pcvar_string(cvar[CVAR_LEVELS],levels_string,charsmax(levels_string))
+	
+	while((argbreak(levels_string,level_str,charsmax(level_str),levels_string,charsmax(levels_string))) != -1)
+	{
+		if(!levels_list)
+		{
+			levels_list = ArrayCreate(1)
+		}
+		
+		ArrayPushCell(levels_list,floatstr(level_str))
+		max_exp = floatstr(level_str)
+	}
+	
+	if(levels_list)
+		levels_count = ArraySize(levels_list)
+	
+	register_clcmd("t1","t1")
+	register_clcmd("t2","t2")
+	register_clcmd("t3","t3")
+	register_clcmd("t4","t4")
+	register_clcmd("t5","t5")
+	register_clcmd("t6","t6")
+	register_clcmd("t7","t7")
 }
 
-public plugin_end(){
-	switch(g_storagetype){
-		case 1:{
-			SaveDataToFile()
+public t1(id)
+{
+	DB_SavePlayerData(id)
+}
+
+public t2(id)
+{
+	Player_SetExp(id,player_data[id][PLAYER_EXP] + 0.01)
+}
+
+public t3(id)
+{
+	Player_SetExp(id,player_data[id][PLAYER_EXP] + 1.0)
+}
+
+public t4(id)
+{
+	player_data[id][PLAYER_EXP] -= 0.01
+}
+
+public t5(id)
+{
+	player_data[id][PLAYER_EXP] -= 1.01
+}
+
+public t6(id)
+{
+	Player_SetExp(id,1337.0)
+}
+
+public t7(id)
+{
+	Player_SetExp(id,322.0)
+}
+
+//
+// Загружаем статистику из БД при подключении игрока
+//
+public client_putinserver(id)
+{
+	arrayset(player_data[id],0,player_data_struct)
+	DB_LoadPlayerData(id)
+}
+
+//
+// Сохраняем данные на дисконнекте
+//
+public client_disconnect(id)
+{
+	DB_SavePlayerData(id)
+}
+
+//
+// Смена ника игрока
+//
+public client_infochanged(id)
+{
+	new cur_name[MAX_NAME_LENGTH],new_name[MAX_NAME_LENGTH]
+	get_user_name(id,cur_name,charsmax(cur_name))
+	get_user_info(id,"name",new_name,charsmax(new_name))
+	
+	if(strcmp(cur_name,new_name) != 0)
+	{
+		copy(player_data[id][PLAYER_NAME],charsmax(player_data[][PLAYER_NAME]),new_name)
+		mysql_escape_string(player_data[id][PLAYER_NAME],charsmax(player_data[][PLAYER_NAME]))
+		
+		if(get_pcvar_num(cvar[CVAR_RANK]) == 0)
+		{
+			DB_SavePlayerData(id,true)
 		}
 	}
 }
 
-public Start_ReCalc(id,level,cid){
-	if(!cmd_access(id,level,cid,0))
-		return PLUGIN_HANDLED
+//
+// Задаем опыт игроку
+//
+Player_SetExp(id,Float:new_exp,bool:no_forward = false,bool:force = false)
+{
+	// опыт не может быть отрицательным
+	if(new_exp < 0.0)
+		new_exp = 0.0
 	
-	new admName[32],admAuthid[36]
+	player_data[id][PLAYER_EXP] = new_exp
+	new rt = RT_OK
 	
-	get_user_name(id,admName,31)
-	get_user_authid(id,admAuthid,35)
+	// понижение по уровню
+	if(new_exp < player_data[id][PLAYER_EXP_TO_NEXT])
+	{
+		rt = RT_LEVEL_DOWN
+	}
+	// повышение по уровню
+	else if(new_exp >= player_data[id][PLAYER_EXP_TO_NEXT])
+	{
+		rt = RT_LEVEL_UP
+	}
+	
+	// расчитываем новый уровень
+	if(rt != RT_OK)
+	{
+		new old_level = player_data[id][PLAYER_LEVEL]
+		new level = player_data[id][PLAYER_LEVEL] = Level_GetByExp(new_exp)
+		player_data[id][PLAYER_LEVELEXP] = Level_GetExp(player_data[id][PLAYER_LEVEL])
+		player_data[id][PLAYER_EXP_TO_NEXT] = Level_GetExpToNext(player_data[id][PLAYER_LEVEL])
 		
-	switch(g_storagetype){
-		case 1:{
-			client_print(id,print_console,"%L %L",id,"AES_TAG_CON",id,"AES_RECALC_START")
-			log_amx("[RECALC] ^"%s<%d><%s><>^" starts level recalculation process",admName,get_user_index(admName),admAuthid)
+		if(!no_forward)
+		{
+			new fw
 			
-			new trackId[36],pStats[player_info - 1],expLevel,tCnt
-			
-			for(new i ; i < ArraySize(g_PlayerStatsId) ; ++i){
-				ArrayGetString(g_PlayerStatsId,i,trackId,35)
-				
-				if(!TrieGetArray(g_PlayerStats,trackId,pStats,player_info - 1))
-					continue
-					
-				expLevel = get_level_for_exp(pStats[EXP])
-				
-				if(pStats[LEVEL] != expLevel){
-					pStats[LEVEL] = expLevel
-					TrieSetArray(g_PlayerStats,trackId,pStats,player_info - 1)
-					
-					tCnt++
-				}
+			if(level > old_level)
+			{
+				fw = FW_LevelUp
+			}
+			else if(level < old_level)
+			{
+				fw = FW_LevelDown
 			}
 			
-			client_print(id,print_console,"%L %L",id,"AES_TAG_CON",id,"AES_RECALC_END",tCnt)
-			log_amx("[RECALC] Total %d entries updated",tCnt)
+			if(fw)
+			{
+				ExecuteForward(fw,dummy,id,level,old_level)
+			}
 		}
-		case 2:{
-			client_print(id,print_console,"%L %L",id,"AES_TAG_CON",id,"AES_RECALC_START")
-			log_amx("[RECALC] ^"%s<%d><%s><>^" starts level recalculation process",admName,get_user_index(admName),admAuthid)
+	}
+	
+	log_amx("SET PLAYER LEVEL %.2f %d %.2f <--",
+		player_data[id][PLAYER_EXP],
+		player_data[id][PLAYER_LEVEL],
+		player_data[id][PLAYER_EXP_TO_NEXT]
+	)
+	
+	return rt
+}
+
+//
+// Задаем бонусы игрока
+//
+Player_SetBonus(id,bonus,bool:force = false)
+{
+	player_data[id][PLAYER_BONUS] = bonus
+	return true
+}
+
+//
+// Задаем уровень игроку
+//
+Player_SetLevel(id,level,bool:force = false)
+{
+	new Float:exp = Level_GetExp(level)
+	
+	if(exp == -1.0)
+	{
+		return false
+	}
+	
+	player_data[id][PLAYER_EXP] = exp
+	player_data[id][PLAYER_LEVEL] = level
+	player_data[id][PLAYER_LEVELEXP] = Level_GetExp(player_data[id][PLAYER_LEVEL])
+	player_data[id][PLAYER_EXP_TO_NEXT] = Level_GetExpToNext(player_data[id][PLAYER_LEVEL])
+	
+	return true
+}
+
+//
+// Функция возвращается текущий уровень по значению опыта
+//
+Level_GetByExp(Float:exp)
+{
+	for(new i ; i < levels_count ; i++)
+	{
+		// ищем уровень по опыту
+		if(exp < ArrayGetCell(levels_list,i))
+		{
+			server_print("--> [LIST] %d %d %.2f",
+				i,exp,ArrayGetCell(levels_list,i)
+			)
 			
-			new err,error[256]
+			return clamp(i  - 1,0,levels_count - 1)
+		}
+	}
+	
+	// возвращаем максимальный уровень
+	return levels_count - 1
+}
+
+//
+// Функция возвращает необходимый опыт до сл. уровня
+//
+Float:Level_GetExpToNext(level)
+{
+	level ++
+	
+	// достигнут максимальный уровень
+	if(level >= levels_count)
+	{
+		return -1.0
+	}
+
+	// TODO: проверки
+	level = clamp(level,0,levels_count - 1)
+	
+	return ArrayGetCell(levels_list,level)
+}
+
+//
+// Функция возвращает опыт для указанного уровня
+//
+Float:Level_GetExp(level)
+{
+	if(!(0 <= level < levels_count))
+		return -1.0
+	
+	return ArrayGetCell(levels_list,level)
+}
+
+//
+// Загрузка статистики игрока из базы данных
+//
+DB_LoadPlayerData(id)
+{
+	// пропускаем HLTV
+	if(is_user_hltv(id))
+	{
+		return false
+	}
+	
+	// пропускаем ботов, если отключена запись статистики ботов
+	if(!get_pcvar_num(cvar[CVAR_RANKBOTS]) && is_user_bot(id))
+	{
+		return false
+	}
+	
+	get_user_info(id,"name",player_data[id][PLAYER_NAME],charsmax(player_data[][PLAYER_NAME]))
+	mysql_escape_string(player_data[id][PLAYER_NAME],charsmax(player_data[][PLAYER_NAME]))
+	
+	get_user_authid(id,player_data[id][PLAYER_STEAMID],charsmax(player_data[][PLAYER_STEAMID]))
+	get_user_ip(id,player_data[id][PLAYER_IP],charsmax(player_data[][PLAYER_IP]),true)
+	
+	// формируем SQL запрос
+	new query[QUERY_LENGTH],len,sql_data[2]
+	
+	sql_data[0] = SQL_LOAD
+	sql_data[1] = id
+	player_data[id][PLAYER_LOADSTATE] = LOAD_WAIT
+	
+	len += formatex(query[len],charsmax(query)-len,"SELECT *")
+	
+	switch(get_pcvar_num(cvar[CVAR_RANK]))
+	{
+		case 0: // статистика по нику
+		{
+			len += formatex(query[len],charsmax(query)-len," FROM `%s` WHERE `name` = '%s'",
+				tbl_name,player_data[id][PLAYER_NAME]
+			)
+		}
+		case 1: // статистика по steamid
+		{
+			len += formatex(query[len],charsmax(query)-len," FROM `%s` WHERE `steamid` = '%s'",
+				tbl_name,player_data[id][PLAYER_STEAMID]
+			)
+		}
+		case 2: // статистика по ip
+		{
+			len += formatex(query[len],charsmax(query)-len," FROM `%s` WHERE `ip` = '%s'",
+				tbl_name,player_data[id][PLAYER_IP]
+			)
+		}
+		default:
+		{
+			return false
+		}
+	}
+	
+	// отправка потокового запроса
+	SQL_ThreadQuery(sql,"SQL_Handler",query,sql_data,sizeof sql_data)
+	
+	return true
+}
+
+//
+// Сохранение статистики игрока
+//
+DB_SavePlayerData(id,bool:reload = false)
+{
+	if(player_data[id][PLAYER_LOADSTATE] < LOAD_OK) // игрок не загрузился
+	{
+		return false
+	}
+	
+	new query[QUERY_LENGTH]
+	
+	new sql_data[2]
+	sql_data[1] = id
+	
+	switch(player_data[id][PLAYER_LOADSTATE])
+	{
+		case LOAD_OK: // обновление данных
+		{
+			if(reload)
+			{
+				player_data[id][PLAYER_LOADSTATE] = LOAD_UPDATE
+			}
 			
-			new Handle:sqlConnection = SQL_Connect(g_sql,err,error,255)
+			sql_data[0] = SQL_UPDATE
 			
-			if(sqlConnection == Empty_Handle){
-				client_print(id,print_console,"%L %L",id,"AES_TAG_CON",id,"SQL_CANT_CON",sqlTable)
+			new len,to_save
+			
+			len += formatex(query[len],charsmax(query) - len,"UPDATE `%s` SET",tbl_name)
+			
+			new Float:diffexp = player_data[id][PLAYER_EXP] - player_data[id][PLAYER_EXPLAST]
+			new diffbonus = player_data[id][PLAYER_BONUS] - player_data[id][PLAYER_BONUSLAST]
+			
+			
+			if(diffexp != 0.0)
+			{
+				len += formatex(query[len],charsmax(query) - len,"`%s` = `%s` + '%.2f'",
+					row_names[ROW_EXP],
+					row_names[ROW_EXP],
+					_:diffexp >= 0 ? diffexp + 0.005 : diffexp - 0.005
+				)
 				
-				log_amx("[RECALC] SQL Connection failed")
-				log_amx("[RECALC] %s [%d]",error,err)
+				player_data[id][PLAYER_EXPLAST] = player_data[id][PLAYER_EXP]
 				
+				to_save ++
+			}
+			
+			if(diffbonus != 0)
+			{
+				len += formatex(query[len],charsmax(query) - len,"%s`%s` = `%s` + '%d'",
+					to_save ? "," : "",
+					row_names[ROW_BONUS],
+					row_names[ROW_BONUS],
+					diffbonus
+				)
+				
+				player_data[id][PLAYER_BONUSLAST] = player_data[id][PLAYER_BONUS]
+				
+				to_save ++
+			}
+			
+			// обновляем время последнего подключения, ник, ип и steamid
+			len += formatex(query[len],charsmax(query) - len,",\
+				`%s` = CURRENT_TIMESTAMP,\
+				`%s` = '%s',\
+				`%s` = '%s'",
+				
+				row_names[ROW_LASTUPDATE],
+				row_names[ROW_STEAMID],player_data[id][PLAYER_STEAMID],
+				row_names[ROW_IP],player_data[id][PLAYER_IP]
+			)
+			
+			if(!reload) // не обновляем ник при его смене
+			{
+				len += formatex(query[len],charsmax(query) - len,",`%s` = '%s'",
+					row_names[ROW_NAME],player_data[id][PLAYER_NAME]
+				)
+			}
+			
+			len += formatex(query[len],charsmax(query) - len,"WHERE `%s` = '%d'",row_names[ROW_ID],player_data[id][PLAYER_ID])
+			
+			if(!to_save) // нечего сохранять
+			{
+				// я обманул. азазаза
+				if(player_data[id][PLAYER_LOADSTATE] == LOAD_UPDATE)
+				{
+					player_data[id][PLAYER_LOADSTATE] = LOAD_NO
+					DB_LoadPlayerData(id)
+				}
+				
+				return false
+			}
+		}
+		case LOAD_NEW: // запрос на добавление новой записи
+		{
+			sql_data[0] = SQL_INSERT
+			
+			formatex(query,charsmax(query),"INSERT INTO `%s` \
+							(`%s`,`%s`,`%s`,`%s`,`%s`)\
+							VALUES('%s','%s','%s','%.2f','%d')\
+							",tbl_name,
+							
+					row_names[ROW_NAME],
+					row_names[ROW_STEAMID],
+					row_names[ROW_IP],
+					row_names[ROW_EXP],
+					row_names[ROW_BONUS],
+					
+					player_data[id][PLAYER_NAME],
+					player_data[id][PLAYER_STEAMID],
+					player_data[id][PLAYER_IP],
+					
+					player_data[id][PLAYER_EXP],
+					player_data[id][PLAYER_BONUS]	
+			)
+			
+			if(reload)
+			{
+				player_data[id][PLAYER_LOADSTATE] = LOAD_UPDATE
+			}
+			else
+			{
+				player_data[id][PLAYER_LOADSTATE] = LOAD_NEWWAIT
+			}
+		}
+	}
+	
+	if(query[0])
+	{
+		log_amx("[%s]",query)
+		SQL_ThreadQuery(sql,"SQL_Handler",query,sql_data,sizeof sql_data)
+	}
+	
+	return true
+}
+
+//
+// Хандлер SQL ответа
+//
+public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
+	switch(failstate)
+	{
+		case TQUERY_CONNECT_FAILED: 
+		{
+			log_amx("SQL connection failed")
+			log_amx("[ %d ] %s",errNum,err)
+			
+			return PLUGIN_HANDLED
+		}
+		case TQUERY_QUERY_FAILED:
+		{
+			new lastQue[QUERY_LENGTH]
+			SQL_GetQueryString(sqlQue,lastQue,charsmax(lastQue)) // узнаем запрос
+			
+			log_amx("SQL query failed")
+			log_amx("[ %d ] %s",errNum,err)
+			log_amx("[ SQL ] [%s]",lastQue)
+			
+			return PLUGIN_HANDLED
+		}
+	}
+	
+	switch(data[0])
+	{
+		case SQL_LOAD: // загрзука статистики игрока
+		{
+			new id = data[1]
+		
+			if(!is_user_connected(id))
+			{
 				return PLUGIN_HANDLED
 			}
 			
-			new Handle:que = SQL_PrepareQuery(sqlConnection,"SELECT `id`,`experience`,`level` FROM `%s`",
-				sqlTable)
+			if(SQL_NumResults(sqlQue)) // считываем статистику
+			{
+				player_data[id][PLAYER_LOADSTATE] = LOAD_OK
+				player_data[id][PLAYER_ID] = SQL_ReadResult(sqlQue,ROW_ID)
+				
+				new Float:exp
+				
+				SQL_ReadResult(sqlQue,ROW_EXP,exp)
+				Player_SetExp(id,exp,true)
+				
+				player_data[id][PLAYER_EXPLAST] = player_data[id][PLAYER_EXP]
+				
+				player_data[id][PLAYER_BONUS] = player_data[id][PLAYER_BONUSLAST] = SQL_ReadResult(sqlQue,ROW_BONUS)
+				
+				log_amx("SELECT id: %d, exp: %.2f, bonus: %d",
+					SQL_ReadResult(sqlQue,ROW_ID),
+					player_data[id][PLAYER_EXPLAST],
+					player_data[id][PLAYER_BONUS]
+				)
+			}
+			else // помечаем как нового игрока
+			{
+				player_data[id][PLAYER_LOADSTATE] = LOAD_NEW
+				
+				DB_SavePlayerData(id) // добавляем запись в базу данных
+				
+				log_amx("SELECT NEW")
+			}
+		}
+		case SQL_INSERT:	// запись новых данных
+		{
+			new id = data[1]
 			
-			if(!SQL_Execute(que)){
-				client_print(id,print_console,"%L %L",id,"AES_TAG_CON",id,"SQL_CANT_CON",sqlTable)
-				
-				SQL_QueryError(que,error,255)
-				
-				log_amx("[RECALC] Query failed")
-				log_amx("[RECALC] %s",error)
-			}else{
-				new exp,level,expLevel,pK,tCnt
-				while(SQL_MoreResults(que)){
-					pK = SQL_ReadResult(que,0)
-					exp = SQL_ReadResult(que,1)
-					level = SQL_ReadResult(que,2)
+			if(is_user_connected(id))
+			{
+				if(player_data[id][PLAYER_LOADSTATE] == LOAD_UPDATE)
+				{
+					player_data[id][PLAYER_LOADSTATE] = LOAD_NO
+					DB_LoadPlayerData(id)
 					
-					expLevel = get_level_for_exp(exp)
-					
-					if(level != expLevel){
-						SQL_QueryAndIgnore(sqlConnection,"UPDATE `%s` SET `level` = '%d' WHERE `id` = '%d'",
-							sqlTable,expLevel,pK)
-							
-						tCnt ++
-					}
-
-					SQL_NextRow(que)					
+					return PLUGIN_HANDLED
 				}
 				
-				client_print(id,print_console,"%L %L",id,"AES_TAG_CON",id,"AES_RECALC_END",tCnt)
-				log_amx("[RECALC] Total %d entries updated",tCnt)
+				player_data[id][PLAYER_ID] = SQL_GetInsertId(sqlQue)	// первичный ключ
+				player_data[id][PLAYER_LOADSTATE] = LOAD_OK		// данные загружены
+				
+				// я упрлся 0)0)0
+				
+				log_amx("INSERT id: %d, exp: %.2f, bonus: %d",
+					player_data[id][PLAYER_ID],
+					player_data[id][PLAYER_EXPLAST],
+					player_data[id][PLAYER_BONUSLAST]
+				)
 			}
-			
-			SQL_FreeHandle(que)
-			SQL_FreeHandle(sqlConnection)
 		}
-		default: client_print(id,print_console,"%L %L",id,"AES_TAG_CON",id,"AES_RECALC_NODB")
+		case SQL_UPDATE: // обновление данных
+		{
+			new id = data[1]
+			
+			if(is_user_connected(id))
+			{	
+				if(player_data[id][PLAYER_LOADSTATE] == LOAD_UPDATE)
+				{
+					player_data[id][PLAYER_LOADSTATE] = LOAD_NO
+					DB_LoadPlayerData(id)
+				}
+				
+				log_amx("UPDATE id: %d, exp: %.2f, bonus: %d",
+					player_data[id][PLAYER_ID],
+					player_data[id][PLAYER_EXPLAST],
+					player_data[id][PLAYER_BONUSLAST]
+				)
+			}
+		}
 	}
 	
-	new players[32],pCount
-	get_players(players,pCount)
-	
-	for(new i ; i < pCount ; ++i){
-		new id = players[i]
-		g_players[id][LEVEL] = get_level_for_exp(g_players[id][EXP])
-	}
-		
 	return PLUGIN_HANDLED
 }
 
-public client_putinserver(id){
-	if(g_storagetype>0)
-		set_task(loadDelay,"LoadPlayerStats",id)	// 4to sa hu..
-		
-}
-
-public client_disconnect(id){
-	if(g_storagetype>0)
-		SavePlayerStats(id)
-}
-
-public LoadPlayerStats(id){
-	if(!is_user_connected(id))
-		return
-	
-	new trackId[72]
-	
-	if(!get_player_trackid(id,trackId,35))
-		return
-	
-	switch(g_storagetype){
-		case 1:{
-			if(TrieKeyExists(g_PlayerStats,trackId)){
-				TrieGetArray(g_PlayerStats,trackId,g_players[id],player_info - 1)
-				g_players[id][LOADED] = 1
-			}else{
-				// mark new player
-				g_players[id][LOADED] = 2
-			}
-		}
-		case 2:{
-			if(sqlFail)
-				return
-			
-			new data[2]
-			
-			data[0] = id
-			data[1] = LOAD_STATS
-			
-			replace_all(trackId,72,"'","\'")
-			replace_all(trackId,72,"`","\`")
-			
-			formatex(g_query,511,"SELECT `experience`,`level`,`bonus`,`trackId`,`name`,`id` FROM `%s` WHERE `trackId` = '%s'",
-				sqlTable,trackId)
-			SQL_ThreadQuery(g_sql,"SQL_Handler",g_query,data,2)
-		}
-	}
-	
-	g_players[id][LAST_CONNECT] = get_systime()
-	g_players[id][EXP_TO_NEXT_LEVEL]  = get_exp_to_next_level(g_players[id][LEVEL])			
-}
-
-// Save for the sunshine.
-public SavePlayerStats(id){
-	// Save for the rain.
-	if(g_players[id][LOADED] <= 0)
-		return
-	
-	new trackId[72],name[64]
-	
-	// We will now believe.
-	if(!get_player_trackid(id,trackId,35))
-		return
-	
-	get_user_name(id,name,31)
-	
-	// We just want to stay.
-	if(!g_savebonus)
-		g_players[id][BONUSES] = 0
-		
-	g_players[id][LAST_CONNECT] = get_systime()
-		
-	switch(g_storagetype){
-		case 1:{ // Hold it in the sunshine.
-			TrieSetArray(g_PlayerStats,trackId,g_players[id],player_info - 1)
-			TrieSetString(g_PlayerNames,trackId,name)
-			
-			if(g_players[id][LOADED] == 2){
-				ArrayPushString(g_PlayerStatsId,trackId)
-			}
-		}
-		case 2:{ // Hold it in the rain.
-			if(sqlFail)
-				return
-			
-			new data[2]
-			
-			data[0] = id
-			data[1] = SAVE_STATS
-			
-			// Bring back the save from back in the day.
-			replace_all(trackId,72,"'","\'")
-			replace_all(trackId,72,"`","\`")
-			
-			replace_all(name,64,"'","\'")
-			replace_all(name,64,"`","\`")
-			
-			// Select time to do the save AMXX want to play.
-			if(g_players[id][LOADED] == 1){
-				formatex(g_query,511,"UPDATE `%s` SET `name` = '%s',`experience` = '%d',`level` = '%d',\
-						`bonus` = '%d',`lastJoin` = NOW() WHERE `trackId` = '%s'",sqlTable,name,g_players[id][EXP],
-						g_players[id][LEVEL],g_players[id][BONUSES],trackId)
-				SQL_ThreadQuery(g_sql,"SQL_Handler",g_query,data,2) // Bring back the day when save was saw.
-			}else if(g_players[id][LOADED] == 2){ 
-				formatex(g_query,511,"INSERT INTO `%s`  (`trackId`,`name`,`experience`,`level`,`bonus`)\
-						VALUES('%s','%s','%d','%d','%d')",sqlTable,trackId,name,g_players[id][EXP],
-						g_players[id][LEVEL],g_players[id][BONUSES])
-				SQL_ThreadQuery(g_sql,"SQL_Handler",g_query,data,2) // And the trust will use to play.
-			}
-		}
-	}
-	
-	// When sun need to shine or reign the rain
-	g_players[id][EXP] = 0
-	g_players[id][LEVEL] = 0
-	g_players[id][BONUSES] = 0
-	g_players[id][LAST_CONNECT] = 0
-	g_players[id][LOADED] = 0
-	g_players[id][EXP_TO_NEXT_LEVEL] = 0
-	// We just still belive to save.
-}
-
-public SQL_Handler(failstate,Handle:que,err[],errcode,data[],datasize){
-	if(sqlFailCount >= get_pcvar_num(cvar[CVAR_SQL_MAXFAIL])){
-		log_amx("max sql fail reached")
-		
-		sqlFail = true
-		
-		//set_fail_state("max sql failure reached")
-		
-		return PLUGIN_HANDLED
-	}
-	
-	switch(failstate){
-		case TQUERY_CONNECT_FAILED: {
-			log_amx("MySQL connection failed")
-			log_amx("[ %d ] %s",errcode,err)
-			log_amx("Query state: %d",data[1])
-			
-			sqlFailCount ++
-			
-			return PLUGIN_CONTINUE
-		}
-		case TQUERY_QUERY_FAILED: {
-			log_amx("MySQL query failed")
-			log_amx("[ %d ] %s",errcode,err)
-			log_amx("Query state: %d",data[1])
-			
-			sqlFailCount ++
-			
-			return PLUGIN_CONTINUE
-		}
-	}
-	
-	new id = data[0]
-	
-	switch(data[1]){
-		case LOAD_STATS:{
-			new numRes = SQL_NumResults(que)
-			if(numRes <= 0){
-				g_players[id][LOADED] = 2	// mark as new player
-				
-				return PLUGIN_HANDLED
-			}else if(numRes > 1){	// проверка на наличие дублей
-				new trackId[36],name[32],pK = -1
-				
-				while(SQL_MoreResults(que)){
-					SQL_ReadResult(que,3,trackId,35)
-					SQL_ReadResult(que,4,name,31)
-					
-					// удаляем последнюю запись, если опыт у новой записи больше последней
-					if(SQL_ReadResult(que,0) >= g_players[id][EXP]){
-						if(pK > -1){
-							data[1] = SAVE_STATS // save XD
-							
-							log_amx("[DB] Merge duplicate trackId %s [ %d %d ]",trackId,
-								SQL_ReadResult(que,0),g_players[id][EXP])
-							
-							formatex(g_query,511,"DELETE FROM `%s` WHERE `id` = '%d'",
-								sqlTable,pK)
-							SQL_ThreadQuery(g_sql,"SQL_Handler",g_query,data,2)
-						}
-					}else{ // значение совпадает, всё равно удалем её
-						data[1] = SAVE_STATS // save XD
-						
-						log_amx("[DB] Skip duplicate trackId %s",trackId)
-							
-						formatex(g_query,511,"DELETE FROM `%s` WHERE `id` = '%d'",
-							sqlTable,SQL_ReadResult(que,5))
-						SQL_ThreadQuery(g_sql,"SQL_Handler",g_query,data,2)
-					}
-					
-					// запоминаем primaryKey последней записи
-					pK = SQL_ReadResult(que,5)
-					
-					if(g_players[id][EXP] < SQL_ReadResult(que,0))
-						g_players[id][EXP] = SQL_ReadResult(que,0)
-					
-					g_players[id][LEVEL] = SQL_ReadResult(que,1)
-					g_players[id][BONUSES] = SQL_ReadResult(que,2)
-					
-					g_players[id][EXP_TO_NEXT_LEVEL] = get_exp_to_next_level(g_players[id][LEVEL])
-			
-					SQL_NextRow(que)
-				}
-				
-				g_players[id][LOADED] = 1
-				
-				return PLUGIN_HANDLED
-			}
-			
-			g_players[id][EXP] = SQL_ReadResult(que,0)
-			g_players[id][LEVEL] = SQL_ReadResult(que,1)
-			g_players[id][BONUSES] = SQL_ReadResult(que,2)
-			g_players[id][EXP_TO_NEXT_LEVEL] = get_exp_to_next_level(g_players[id][LEVEL])
-			
-			g_players[id][LOADED] = 1
-		}
-		case SAVE_STATS:{
-			// dont care about stats save
-		}
-		case DROP_STATS:{
-			while(SQL_MoreResults(que)){
-				new pk = SQL_ReadResult(que,0)
-				
-				new dd[2]
-				dd[1] = -1
-				
-				formatex(g_query,511,"DELETE FROM `%s` WHERE `id` = '%d'",
-					sqlTable,pk)
-				SQL_ThreadQuery(g_sql,"SQL_Handler",g_query,dd,2)
-				
-				SQL_NextRow(que)
-			}
-			
-			if(SQL_NumResults(que))
-				log_amx("%d ranks pruned",SQL_NumResults(que))
-		}
-	}
-	
-	return PLUGIN_HANDLED
-	
-}
-
-public fw_ClientUserInfoChanged(id, buffer) {
-	if(!is_user_connected(id))
-		return FMRES_IGNORED
-
-	new name[32],val[32]
-	get_user_name(id,name,31)
-	engfunc(EngFunc_InfoKeyValue,buffer,"name",val,31)
-	
-	if(equal(val,name))
-		return FMRES_IGNORED
-	else{	
-		SavePlayerStats(id)
-		LoadPlayerStatsByName(id,val)
-	}
-
-	return FMRES_IGNORED
-}
-
-public LoadPlayerStatsByName(id,name[]){
-	new trackId[72]
-	
-	copy(trackId,72,name)
-	
-	switch(g_storagetype){
-		case 1:{
-			if(TrieKeyExists(g_PlayerStats,trackId)){
-				TrieGetArray(g_PlayerStats,trackId,g_players[id],player_info - 1)
-				g_players[id][LOADED] = 1
-			}else{
-				// mark new player
-				g_players[id][LOADED] = 2
-			}
-		}
-		case 2:{
-			if(sqlFail)
-				return
-			
-			new data[2]
-			
-			data[0] = id
-			data[1] = LOAD_STATS
-			
-			replace_all(trackId,72,"'","\'")
-			replace_all(trackId,72,"`","\`")
-			
-			formatex(g_query,511,"SELECT `experience`,`level`,`bonus`,`trackId`,`name`,`id` FROM `%s` WHERE `trackId` = '%s'",
-				sqlTable,trackId)
-			SQL_ThreadQuery(g_sql,"SQL_Handler",g_query,data,2)
-		}
-	}
-	
-	g_players[id][LAST_CONNECT] = get_systime()
-	g_players[id][EXP_TO_NEXT_LEVEL]  = get_exp_to_next_level(g_players[id][LEVEL])	
-}
-
-public LoadDataFromFile(){
-	new fPath[256]//,streamBlocks[StreamData]
-	get_datadir(fPath,255)
-	formatex(fPath,255,"%s%s",fPath,stDir)
-	
-	if(!dir_exists(fPath))
-		mkdir(fPath)
-		
-	formatex(fPath,255,"%s%s",fPath,stFile)
-	
-	new f = fopen(fPath,"r")
-	
-	if(!f)
-		return
-		
-	/*new statsInfo[2],pStats[player_info - 1]
-
-	fread_raw(f,statsInfo[0],2,BLOCK_INT)
-	
-	for(new i;i < statsInfo[1] ; ++i){
-		fread_raw(f,streamBlocks[0],DATA_END,BLOCK_INT)
-		
-		pStats[EXP] = streamBlocks[DATA_EXP]
-		pStats[LEVEL] = streamBlocks[DATA_LEVEL]
-		pStats[BONUSES] = streamBlocks[DATA_BONUSES]
-		pStats[LAST_CONNECT] = streamBlocks[DATA_LAST_CONNECT]
-		
-		TrieSetArray(g_PlayerStats,streamBlocks[DATA_UNIQUE],pStats,player_info - 1)
-		TrieSetString(g_PlayerNames,streamBlocks[DATA_UNIQUE],streamBlocks[DATA_NAME])
-		ArrayPushString(g_PlayerStatsId,streamBlocks[DATA_UNIQUE])
-	}*/
-	
-	new buffer[512],pruneTime,curTime,prunedEntries
-	
-	if(get_pcvar_num(cvar[CVAR_DB_PRUNE]) > 0){
-		pruneTime = get_pcvar_num(cvar[CVAR_DB_PRUNE])  * 24 * 60 * 60
-		curTime = get_systime()
-	}
-		
-	while(!feof(f)){
-		fgets(f,buffer,511)
-		trim(buffer)
-		
-		if(!strlen(buffer))
-			continue
-		
-		if(buffer[0] == ';')
-			continue
-			
-		new trackId[36],userName[32],sStats[player_info - 1][12],pStats[player_info - 1]
-		parse(buffer,trackId,35,userName,31,sStats[EXP],11,sStats[LEVEL],11,sStats[BONUSES],11,sStats[LAST_CONNECT],11)
-		
-		// бывает :)
-		if(!trackId[0]){
-			log_amx("[DB] Skip empty trackid for %s",userName)
-			
-			continue
-		}
-			
-		// проверка на дубли. Ну кривой я скриптер, извините :(
-		if(TrieKeyExists(g_PlayerStats,trackId)){
-			new tStats[player_info - 1]
-			TrieGetArray(g_PlayerStats,trackId,tStats,player_info - 1)
-			
-			if(str_to_num(sStats[EXP]) > tStats[EXP]){
-				log_amx("[DB] Merge stats for duplicate trackid: %s [ %d %d ]",trackId,
-					str_to_num(sStats[EXP]),tStats[EXP])
-					
-				pStats[EXP] = str_to_num(sStats[EXP])
-				pStats[LEVEL] = str_to_num(sStats[LEVEL])
-				pStats[BONUSES] = str_to_num(sStats[BONUSES])
-				pStats[LAST_CONNECT] = str_to_num(sStats[LAST_CONNECT])
-				
-				TrieSetArray(g_PlayerStats,trackId,pStats,player_info - 1)
-				TrieSetString(g_PlayerNames,trackId,userName)
-				
-				continue
-			}
-				
-			log_amx("[DB] Skip duplicate trackid %s",trackId)
-			
-			continue
-		}
-		
-		if(pruneTime){
-			if(str_to_num(sStats[LAST_CONNECT]) + pruneTime < curTime){
-				prunedEntries ++
-				
-				continue
-			}
-		}
-		
-		pStats[EXP] = str_to_num(sStats[EXP])
-		pStats[LEVEL] = str_to_num(sStats[LEVEL])
-		pStats[BONUSES] = str_to_num(sStats[BONUSES])
-		pStats[LAST_CONNECT] = str_to_num(sStats[LAST_CONNECT])
-		
-		TrieSetArray(g_PlayerStats,trackId,pStats,player_info - 1)
-		TrieSetString(g_PlayerNames,trackId,userName)
-		ArrayPushString(g_PlayerStatsId,trackId)
-	}
-	
-	if(prunedEntries)
-		log_amx("%d ranks pruned",prunedEntries)
-	
-	fclose(f)
-}
-
-public SaveDataToFile(){
-	new fPath[256]
-	get_datadir(fPath,255)
-	formatex(fPath,255,"%s%s%s",fPath,stDir,stFile)
-	
-	new f = fopen(fPath,"w+")
-	
-	if(!f)
-		return
-		
-	/*new statsInfo[2]
-	
-	statsInfo[0] = fSVersion
-	statsInfo[1] = ArraySize(g_PlayerStatsId)
-	
-	fwrite_raw(f,statsInfo[0],2,BLOCK_INT)
-	*/
-	
-	fprintf(f,";^n; %s v.%s^n; File Storage Engine^n; by %s^n;^n",
-		PLUGIN,VERSION,AUTHOR)
-	fprintf(f,"; TrackID | Name | EXP | Level | Bonuses | Last Connect ^n^n")
-	
-	new playerInfo[player_info - 1]//,streamBlocks[StreamData]
-	
-	for(new i; i < ArraySize(g_PlayerStatsId); ++i){
-		new trackId[36],name[32]
-		ArrayGetString(g_PlayerStatsId,i,trackId,35)
-		
-		TrieGetArray(g_PlayerStats,trackId,playerInfo,player_info - 1)
-		TrieGetString(g_PlayerNames,trackId,name,31)
-		
-		/*streamBlocks[DATA_EXP] = playerInfo[EXP]
-		streamBlocks[DATA_LEVEL] = playerInfo[LEVEL]
-		streamBlocks[DATA_BONUSES] = playerInfo[BONUSES]
-		streamBlocks[DATA_LAST_CONNECT] = playerInfo[LAST_CONNECT]
-		*/
-		//fwrite_raw(f,streamBlocks[0],DATA_END,BLOCK_INT)	// da ya je pro
-		
-		//	  TrackID | Name | EXP | Level | Bonuses | Last Connect |
-		fprintf(f,"^"%s^" ^"%s^" ^"%d^" ^"%d^" ^"%d^" ^"%d^"^n",trackId,
-		name,playerInfo[EXP],playerInfo[LEVEL],playerInfo[BONUSES],playerInfo[LAST_CONNECT])
-		
-	}
-	
-	new ftime[256]
-	format_time(ftime,255,"%m/%d/%Y - %H:%M:%S",get_systime())
-	fprintf(f,"^n; Last update: %s",ftime)
-	
-	fclose(f)
-}
-
-// попытаемся сохранить что-то при краше
-public Server_BSOD(){
-	new players[32],pCount
-	get_players(players,pCount)
-	
-	for(new i ; i < pCount ; ++i)
-		client_disconnect(players[i]) // вызываем функцию отключения для сохранения
-		
-	if(g_storagetype == 1) // сохраняем файл статистики
-		SaveDataToFile()
-}
-
-get_player_trackid(id,trackId[],trackLen){
-	switch(g_trackmode){
-		case 0: get_user_name(id,trackId,trackLen)
-		case 1: {
-			get_user_authid(id,trackId,trackLen)
-			
-			if(!strcmp(trackId,"STEAM_ID_LAN") || !strcmp(trackId,"VALVE_ID_LAN") || !strcmp(trackId,"BOT")
-				|| !strcmp(trackId,"HLTV"))
-				return 0
-		}
-		case 2: get_user_ip(id,trackId,trackLen,1)
-	}
-	
-	return 1
-}
-
-// returns experinece count for next level
-get_exp_to_next_level(lvl){
-	lvl ++
-	
-	if(lvl > g_maxLevel -1)
-		return -1
-		
-	lvl = clamp(lvl,0,g_maxLevel - 1)
-		
-	return ArrayGetCell(g_Levels,lvl)
-}
-
-// возвращает уровень опыта
-get_level_for_exp(exp){
-	for(new i; i < g_maxLevel; ++i){
-		if(exp < ArrayGetCell(g_Levels,i)){
-			return clamp(i - 1,0)
-		}else if(i + 1 >= g_maxLevel){
-			return g_maxLevel - 1
-		}
-	}
-	
-	return 0
-}
-
-public plugin_natives(){
-	register_library("aes_main")
-	
-	register_native("aes_add_player_exp","_aes_add_player_exp")
-	register_native("aes_add_player_bonus","_aes_add_player_bonus")
-	
-	register_native("aes_get_stats","_aes_get_stats")
-	
-	register_native("aes_get_player_stats","_aes_get_player_stats")
-	register_native("aes_set_player_stats","_aes_set_player_stats")
-	
-	register_native("aes_set_level_exp","_aes_set_level_exp")
-	register_native("aes_get_level_name","_aes_get_level_name")
-	register_native("aes_get_level_for_exp","_aes_get_level_for_exp")
-	register_native("aes_get_max_level","_aes_get_max_level")
-	register_native("aes_get_exp_to_next_level","_aes_get_exp_to_next_level")
-}
+//
+// API
+//
 
 #define CHECK_PLAYER(%1) \
-if (!(1 <= %1 <= g_maxplayers)) \
+if (!(0 < %1 <= MaxClients)) \
 { \
 	log_error(AMX_ERR_NATIVE, "player out of range (%d)", %1); \
 	return 0; \
 }
 
-/*
-	@id - player id
-	@exp - experience value
-	@override
-	
-	@return - 
-		0 on fail
-		1 on success
-		2 on level up
-		3 on max
-		4 on level down
-	
-	native aes_add_player_exp(id,exp)
-*/
-public _aes_add_player_exp(plugin,params){
-	if(params < 2){
-		log_error(AMX_ERR_NATIVE,"bad arguments num, expected 2, passed %d", params)
+public plugin_natives()
+{
+	/*
+		aes_set_player_exp
+		aes_get_player_exp
 		
-		return 0
-	}
+		aes_get_player_bonus
+		aes_set_player_bonus
+	*/
 	
-	new id = get_param(1)
-	new exp = get_param(2)
+	register_library("aes")
+	
+	register_native("aes_set_player_exp","_aes_set_player_exp",true)
+	register_native("aes_get_player_exp","_aes_get_player_exp",true)
+	register_native("aes_get_player_reqexp","_aes_get_player_reqexp",true)
+	register_native("aes_set_player_bonus","_aes_set_player_bonus",true)
+	register_native("aes_get_player_bonus","_aes_get_player_bonus",true)
+	register_native("aes_set_player_level","_aes_set_player_level",true)
+	register_native("aes_get_player_level","_aes_get_player_level",true)
+	register_native("aes_get_max_level","_aes_get_max_level",true)
+	register_native("aes_get_level_name","_aes_get_level_name")
+	
+	// 0.4 DEPRECATED
+	register_library("aes_main")
+	register_native("aes_add_player_exp","_aes_add_player_exp",true)
+	register_native("aes_add_player_bonus","_aes_add_player_bonus",true)
+	register_native("aes_get_stats","_aes_get_stats")
+	register_native("aes_get_player_stats","_aes_get_player_stats")
+	register_native("aes_set_player_stats","_aes_set_player_stats")
+	register_native("aes_set_level_exp","_aes_set_level_exp")
+	register_native("aes_get_level_name","_aes_get_level_name")
+	register_native("aes_get_level_for_exp","_aes_get_level_for_exp",true)
+	register_native("aes_get_exp_to_next_level","_aes_get_exp_to_next_level",true)
+}
+
+public _aes_set_player_exp(id,Float:exp,bool:no_forward,bool:force)
+{
+	CHECK_PLAYER(id)
+	return Player_SetExp(id,exp,no_forward,force)
+}
+
+public _aes_get_player_exp(id)
+{
+	CHECK_PLAYER(id)
+	return _:player_data[id][PLAYER_EXP]
+}
+
+public _aes_get_player_reqexp(id)
+{
+	CHECK_PLAYER(id)
+	return _:player_data[id][PLAYER_EXP_TO_NEXT]
+}
+
+public _aes_set_player_bonus(id,bonus,bool:force)
+{
+	CHECK_PLAYER(id)
+	return Player_SetBonus(id,bonus,force)
+}
+
+public _aes_get_player_bonus(id)
+{
+	CHECK_PLAYER(id)
+	return player_data[id][PLAYER_BONUS]
+}
+
+public _aes_set_player_level(id,level,bool:force)
+{
+	CHECK_PLAYER(id)
+	return Player_SetLevel(id,level,force)
+}
+
+public _aes_get_player_level(id)
+{
+	CHECK_PLAYER(id)
+	return player_data[id][PLAYER_LEVEL]
+}
+
+public _aes_get_max_level()
+{
+	return levels_count
+}
+
+public _aes_get_level_name(plugin,params)
+{
+	new level = get_param(1)
+	new len = get_param(3)
+	new idLang = get_param(4)
+	
+	if(level > levels_count)
+		level = levels_count - 1
+		
+	new LangKey[10],levelName[64]
+	
+	formatex(LangKey,charsmax(LangKey),"LVL_%d",level + 1)
+	len = formatex(levelName,len,"%L",idLang,LangKey)
+	
+	set_string(2,levelName,len)
+	
+	return len
+}
+
+//
+// ОБРАТНАЯ СОВМЕСТИМОСТЬ С 0.4
+//
+public _aes_get_stats()
+{
+	return false
+}
+
+public _aes_add_player_exp(id,exp){
+	CHECK_PLAYER(id)
 	
 	if(!exp)
 		return 0
 	
-	CHECK_PLAYER(id)
-	
-	if(g_players[id][LOADED] <= 0)
-		return 0
-		
-	if(params < 3 || !get_param(3)){
-		if(g_players[id][LEVEL] >= g_maxLevel - 1){
-			return 3
-		}
-	}
-	
-	// узнаем опыт последнего уровня
-	new lastExp = get_exp_to_next_level(g_players[id][LEVEL] - 1)
-	new oldLevel = g_players[id][LEVEL]
-	
-	g_players[id][EXP] += exp
-	
-	if(g_players[id][EXP] < 0)
-		g_players[id][EXP] = 0
-	
-	if(g_players[id][EXP] >= g_players[id][EXP_TO_NEXT_LEVEL] && g_players[id][LEVEL] < g_maxLevel - 1){ // уровень вверх
-		new ret
-		
-		g_players[id][LEVEL] = get_level_for_exp(g_players[id][EXP])
-		g_players[id][EXP_TO_NEXT_LEVEL] = get_exp_to_next_level(g_players[id][LEVEL])
-		
-		ExecuteForward(g_LevelUpForward,ret,id,g_players[id][LEVEL],oldLevel)
-		
-		return 2
-	}else if(g_players[id][EXP] < lastExp){ // уровень вниз :)
-		new ret
-		
-		g_players[id][LEVEL] = get_level_for_exp(g_players[id][EXP])
-		g_players[id][EXP_TO_NEXT_LEVEL] = get_exp_to_next_level(g_players[id][LEVEL])
-		
-		ExecuteForward(g_LevelDownForward,ret,id,g_players[id][LEVEL],oldLevel)
-		
-		return 4
-	}
-	
-	return 1
+	return Player_SetExp(id,player_data[id][PLAYER_EXP] + float(exp))
 }
 
-/*
-	@id - player id
-	@bonus - bonus points to add
-	
-	@return -
-		0 - on fail
-		1 - on success
-		2 - on overset
-		
-	native aes_add_player_bonus(id,bonus)
-*/
-public _aes_add_player_bonus(plugin,params){
-	if(params < 2){
-		log_error(AMX_ERR_NATIVE,"bad arguments num, expected 2, passed %d", params)
-		
-		return 0
-	}
-	
-	new id = get_param(1)
-	new bonus = get_param(2)
-	
+public _aes_add_player_bonus(id,bonus)
+{
 	CHECK_PLAYER(id)
 	
-	if(g_players[id][LOADED] <= 0)
+	if(!bonus)
 		return 0
-		
-	g_players[id][BONUSES] += bonus
 	
-	if(g_players[id][BONUSES] < 0){
-		g_players[id][BONUSES] = 0
-		
-		return 2
-	}
-	
-	return 1
+	return Player_SetBonus(id,player_data[id][PLAYER_BONUS] +bonus)
 }
 
-/*
-	@id - player id
-	@data - array with player stats
-		data[0] - player experience
-		data[1] - player level
-		data[2] - player bonuses
-		data[3] - player next level experience
-	
-	@return - 
-		0 on fail
-		1 on success
-	
-	native aes_get_player_stats(id,data[4])
-*/
 public _aes_get_player_stats(plugin,params){
-	if(params < 2){
-		log_error(AMX_ERR_NATIVE,"bad arguments num, expected 2, passed %d", params)
-		
-		return 0
-	}
-	
 	new id = get_param(1)
 	
 	CHECK_PLAYER(id)
 	
-	if(g_players[id][LOADED] <= 0)
+	if(player_data[id][PLAYER_LOADSTATE] == LOAD_NO)
 		return 0
 	
 	new ret[4]
 	
-	ret[0] = g_players[id][EXP]
-	ret[1] = g_players[id][LEVEL]
-	ret[2] = g_players[id][BONUSES]
-	ret[3] = get_exp_to_next_level(ret[1])
+	ret[0] = floatround(player_data[id][PLAYER_EXP])
+	ret[1] = player_data[id][PLAYER_LEVEL]
+	ret[2] = player_data[id][PLAYER_BONUS]
+	ret[3] = floatround(player_data[id][PLAYER_EXP_TO_NEXT])
 	
-	set_array(2,ret,4)
+	set_array(2,ret,sizeof ret)
 	
 	return 1
 }
 
-/*
-	@id - player id
-	@stats - stats array
-		[0] - experience
-		[1] - level
-		[2] - bonuses
-		
-	native aes_set_player_stats(id,stats[3])
-*/
 public _aes_set_player_stats(plugin,params){
 	if(params < 2){
 		log_error(AMX_ERR_NATIVE,"bad arguments num, expected 2, passed %d", params)
@@ -1055,283 +946,43 @@ public _aes_set_player_stats(plugin,params){
 	new st[3]
 	get_array(2,st,3)
 	
-	if(st[1] >= g_maxLevel)
-		st[1] = g_maxLevel - 1
+	if(st[0] > -1)
+		Player_SetExp(id,float(st[0]),true,true)
 	
-	if(st[0] >= 0)
-		g_players[id][EXP] = st[0]
-	else if(st[0] < 0 && g_players[id][LEVEL] != st[1] && st[1] > -1){ // рассчитываем опыт для заданного уровня
-		g_players[id][EXP] = get_exp_to_next_level(st[1] - 1)
-	}
+	if(st[1] > -1)
+		Player_SetLevel(id,st[1])
 		
-	if(st[1] >= 0)
-		g_players[id][LEVEL] = st[1]
-	else if(st[1] < 0 && st[0] > -1){ // рассчитываем уровень для заданного опыта
-		g_players[id][LEVEL] = get_level_for_exp(st[0])
-	}
-	
 	if(st[2] > -1)
-		g_players[id][BONUSES] = st[2]
-		
-	g_players[id][EXP_TO_NEXT_LEVEL] = get_exp_to_next_level(g_players[id][LEVEL])
-	
-	if(!g_players[id][LOADED])
-		g_players[id][LOADED] = 1
+		Player_SetBonus(id,st[2])
 	
 	return 1
 }
 
-public _aes_set_level_exp(plugin,params){
-	if(params < 2){
-		log_error(AMX_ERR_NATIVE,"bad agruments num, expected 2, passed %d", params)
-	
-		return 0
-	}
-	
-	new lvl = get_param(1)
-	
-	if(lvl == -1){
-		ArrayPushCell(g_Levels,get_param(2))
-		
-		if(params == 3){
-			new levelName[32],key[10]
-			get_string(3,levelName,31)
-			
-			if(strlen(levelName)){
-				formatex(key,9,"%d",g_maxLevel)
-				TrieSetString(g_LevelNames,key,levelName)
-			}
-		}
-		
-		g_maxLevel ++
-		
-		return g_maxLevel - 1
-	}else{
-		if(lvl > g_maxLevel - 1 || lvl < 0)
-			return -1
-			
-		ArraySetCell(g_Levels,lvl,get_param(2))
-	}
-	
-	return -1
+// что это за херня D:
+public _aes_set_level_exp()
+{
+	return false
 }
 
-/*
-	@lvlnum - player id
-	@level[] - level name output
-	@len - len
-	
-	#idLang - return level name in idLang player language
-	
-	@return -
-		0 - on fail
-		1 - on success
-		
-	native aes_get_level_name(lvlnum,level[],len,idLang = 0)
-*/
-public _aes_get_level_name(plugin,params){
-	if(params < 3){
-		log_error(AMX_ERR_NATIVE,"bad arguments num, expected 2, passed %d", params)
-		
-		return 0
-	}
-	
-	new level = get_param(1)
-	new idLang = get_param(4)
-	
-	if(level > g_maxLevel)
-		level = g_maxLevel
-		
-	new LangKey[10],levelName[64]
-	
-	formatex(LangKey,9,"%d",level)
-	
-	if(!TrieGetString(g_LevelNames,LangKey,levelName,31)){
-		level ++
-		
-		if(level > g_maxLevel)
-			level = g_maxLevel
-		
-		formatex(LangKey,9,"LVL_%d",level)
-		formatex(levelName,63,"%L",idLang,LangKey)
-	}
-	
-	set_string(2,levelName,get_param(3))
-	
-	return 1
+public _aes_get_level_for_exp(exp)
+{
+	return Level_GetByExp(float(exp))
 }
 
-/*
-	@exp - exeprience
-	@return - level num
-	
-	native aes_get_level_for_exp(exp)
-*/
-
-public _aes_get_level_for_exp(plugin,params){
-	if(params < 1){
-		log_error(AMX_ERR_NATIVE,"bad arguments num, expected 1, passed %d", params)
-		
-		return 0
-	}
-	
-	return get_level_for_exp(get_param(1))
+public _aes_get_exp_to_next_level(lvl)
+{
+	return floatround(Level_GetExpToNext(lvl))
 }
 
-/*
-	@trackIds - dynamic array with trackId
-	
-	@return - dynamic array with stats
-	
-	native aes_get_stats(Array:trackIds)
-*/
-public _aes_get_stats(plugin,params){
-	if(params < 1){
-		log_error(AMX_ERR_NATIVE,"bad arguments num, expected 1, passed %d", params)
-		
-		return 0
-	}
-		
-	new Array:arrHandler = Array:get_param(1)
-	new Array:retArray = ArrayCreate(4)
-	
-	switch(g_storagetype){
-		case 1:{
-			new temp2[4]
-			
-			for(new i;i < ArraySize(arrHandler); ++i){
-				new trackId[36]
-				ArrayGetString(arrHandler,i,trackId,35)
-				
-				if(TrieKeyExists(g_PlayerStats,trackId)){
-					new pStats[player_info - 1]
-					TrieGetArray(g_PlayerStats,trackId,pStats,player_info - 1)
-					
-					temp2[0] = pStats[EXP]
-					temp2[1] = pStats[LEVEL]
-					temp2[2] = pStats[BONUSES]
-					temp2[3] = get_exp_to_next_level(temp2[1])
-				}
-				
-				ArrayPushArray(retArray,temp2)
-				arrayset(temp2,-1,4)
-			}
-		}
-		case 2:{
-			if(sqlFail){
-				ArrayDestroy(arrHandler)
-				
-				return 0
-			}
-			
-			if(sqlFailCount >= get_pcvar_num(cvar[CVAR_SQL_MAXFAIL])){
-				log_amx("max sql fail reached")
-
-				sqlFail = true
-				
-				ArrayDestroy(arrHandler)
-				
-				return 0
-			}
-			
-			new errcode,err[256],len
-	
-			new Handle:sqlConnection = SQL_Connect(g_sql,errcode,err,255)
-			
-			if(errcode){
-				log_amx("[ aes_get_stats ] MySQL connection failed")
-				log_amx("[ %d ] %s",errcode,err)
-				
-				sqlFailCount ++
-				
-				ArrayDestroy(arrHandler)
-				
-				return 0
-			}
-			
-			new Trie:temp = TrieCreate()
-			new temp2[4]
-			
-			arrayset(temp2,-1,4)
-			
-			len += formatex(g_query[len],512 - len,"SELECT * FROM `%s` WHERE `trackId` IN(",sqlTable)
-			
-			for(new i;i < ArraySize(arrHandler) ; ++i){
-				new trackId[72]
-				ArrayGetString(arrHandler,i,trackId,36)
-				TrieSetCell(temp,trackId,i)
-				SQL_QuoteString(sqlConnection,trackId,72,trackId)
-				
-				len += formatex(g_query[len],512 - len,"'%s'",trackId)
-				
-				if(ArraySize(arrHandler) - 1 != i){
-					len += formatex(g_query[len],512 - len,",")
-				}
-				
-				ArrayPushArray(retArray,temp2)
-			}
-			
-			len += formatex(g_query[len],512 - len,")")
-			
-			new Handle:que = SQL_PrepareQuery(sqlConnection,g_query)
-			
-			if(!SQL_Execute(que)){
-				SQL_QueryError(que,err,256)
-				
-				log_amx("[ aes_get_stats ] Query failed")
-				log_amx("%s",err)
-				
-				sqlFailCount ++
-			}else{
-				while(SQL_MoreResults(que)){
-					new trackId[36],aid
-					
-					SQL_ReadResult(que,1,trackId,35)
-					temp2[0] = SQL_ReadResult(que,3)
-					temp2[1] = SQL_ReadResult(que,4)
-					temp2[2] = SQL_ReadResult(que,5)
-					temp2[3] = get_exp_to_next_level(temp2[0])
-					
-					TrieGetCell(temp,trackId,aid)
-					ArraySetArray(retArray,aid,temp2)
-					arrayset(temp2,-1,4)
-					
-					SQL_NextRow(que)
-				}
-			}
-			
-			TrieDestroy(temp)
-			
-			SQL_FreeHandle(que)
-			SQL_FreeHandle(sqlConnection)
-		}
-	}
-	
-	ArrayDestroy(arrHandler)
-	
-	new arrStr[12]
-	formatex(arrStr,11,"%d",retArray)
-	
-	return str_to_num(arrStr)
-}
-
-public _aes_get_max_level(plugin,params){
-	return g_maxLevel
-}
-
-public _aes_get_exp_to_next_level(plugin,params){
-	if(params < 1){
-		log_error(AMX_ERR_NATIVE,"bad arguments num, expected 1, passed %d", params)
-		
-		return -1
-	}
-	
-	new lvl = get_param(1)
-	
-	if(lvl < 0 || lvl > g_maxLevel){
-		log_error(AMX_ERR_NATIVE,"level out of bounds (%d)",lvl)
-		return -1
-	}
-	
-	return get_exp_to_next_level(lvl)
+/*********    mysql escape functions     ************/
+mysql_escape_string(dest[],len)
+{
+	//copy(dest, len, source);
+	replace_all(dest,len,"\\","\\\\");
+	replace_all(dest,len,"\0","\\0");
+	replace_all(dest,len,"\n","\\n");
+	replace_all(dest,len,"\r","\\r");
+	replace_all(dest,len,"\x1a","\Z");
+	replace_all(dest,len,"'","''");
+	replace_all(dest,len,"^"","^"^"");
 }
