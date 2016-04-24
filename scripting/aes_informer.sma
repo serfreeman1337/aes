@@ -51,7 +51,7 @@ new cvar[cvars_num]
 
 /* - CACHED VALUES - */
 
-// кеш от души
+// РєРµС€ РѕС‚ РґСѓС€Рё
 new Float:hudUpdateInterval
 new bool:hudInfoOn, Float:hudInfoxPos,Float:hudInfoyPos,hudInfoColor[3],bool:hudInfoColorRandom
 new bool:hudDeadOn, Float:hudDeadxPos, Float:hudDeadyPos,hudDeadColor[3],bool:hudDeadColorRandom
@@ -580,7 +580,7 @@ public Show_Hud_Informer(taskId){
 		
 		if(isAlive){
 			if(hudInfoColorRandom){
-				// рандом такой рандом
+				// СЂР°РЅРґРѕРј С‚Р°РєРѕР№ СЂР°РЅРґРѕРј
 				hudInfoColor[0] = random(25500) / 100
 				hudInfoColor[1] = random(25500) / 100
 				hudInfoColor[2] = random(25500) / 100

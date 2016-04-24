@@ -10,7 +10,7 @@
 #define PLUGIN "Advanced Experience System"
 #define VERSION "0.5 Vega"
 #define AUTHOR "serfreeman1337"
-#define LASTUPDATE "23, April (04), 2016"
+#define LASTUPDATE "24, April (04), 2016"
 
 //
 // Основано на CSstatsX SQL
@@ -51,6 +51,7 @@ enum _:cvars
 	
 	CVAR_RANK,
 	CVAR_RANKBOTS,
+	CVAR_PAUSE,
 	
 	CVAR_LEVELS
 }
@@ -87,7 +88,7 @@ enum _:row_ids		// столбцы таблицы
 
 enum _:
 {
-	RT_FAIL,
+	RT_NO,
 	RT_OK,
 	RT_LEVEL_DOWN,
 	RT_LEVEL_UP
@@ -143,6 +144,7 @@ public plugin_init()
 	
 	cvar[CVAR_RANK] = register_cvar("aes_track_mode","1")
 	cvar[CVAR_RANKBOTS] = register_cvar("aes_track_bots","1")
+	cvar[CVAR_PAUSE] = register_cvar("aes_track_pause","0",FCVAR_SERVER)
 	
 	cvar[CVAR_LEVELS] = register_cvar("aes_level","0 20 40 60 100 150 200 300 400 600 1000 1500 2100 2700 3400 4200 5100 5900 7000 10000")
 
@@ -321,12 +323,18 @@ public client_infochanged(id)
 //
 Player_SetExp(id,Float:new_exp,bool:no_forward = false,bool:force = false)
 {
+	// статистика на паузе
+	if(get_pcvar_num(cvar[CVAR_PAUSE]) && !force)
+	{
+		return RT_NO
+	}
+	
 	// опыт не может быть отрицательным
 	if(new_exp < 0.0)
 		new_exp = 0.0
 	
-	player_data[id][PLAYER_EXP] = new_exp
 	new rt = RT_OK
+	player_data[id][PLAYER_EXP] = new_exp
 	
 	// понижение по уровню
 	if(new_exp < player_data[id][PLAYER_EXP_TO_NEXT])
@@ -381,6 +389,12 @@ Player_SetExp(id,Float:new_exp,bool:no_forward = false,bool:force = false)
 //
 Player_SetBonus(id,bonus,bool:force = false)
 {
+	// статистика на паузе
+	if(get_pcvar_num(cvar[CVAR_PAUSE]) && !force)
+	{
+		return false
+	}
+	
 	player_data[id][PLAYER_BONUS] = bonus
 	return true
 }
@@ -390,6 +404,12 @@ Player_SetBonus(id,bonus,bool:force = false)
 //
 Player_SetLevel(id,level,bool:force = false)
 {
+	// статистика на паузе
+	if(get_pcvar_num(cvar[CVAR_PAUSE]) && !force)
+	{
+		return false
+	}
+	
 	new Float:exp = Level_GetExp(level)
 	
 	if(exp == -1.0)
