@@ -10,7 +10,11 @@
 #define PLUGIN "Advanced Experience System"
 #define VERSION "0.5 Vega"
 #define AUTHOR "serfreeman1337"
-#define LASTUPDATE "24, April (04), 2016"
+#define LASTUPDATE "02, May (05), 2016"
+
+#if AMXX_VERSION_NUM < 183
+	#define client_disconnected client_disconnect
+#endif
 
 //
 // Основано на CSstatsX SQL
@@ -22,6 +26,8 @@
 enum _:sql_que_type	// тип sql запроса
 {
 	SQL_DUMMY,
+	SQL_IMPORT,	// импорт в БД из файла stats.ini
+	SQL_IMPORTFINISH,
 	SQL_LOAD,	// загрузка статистики
 	SQL_UPDATE,	// обновление
 	SQL_INSERT,	// внесение новой записи
@@ -151,8 +157,12 @@ public plugin_init()
 	FW_LevelUp = CreateMultiForward("aes_player_levelup",ET_IGNORE,FP_CELL,FP_CELL,FP_CELL)
 	FW_LevelDown = CreateMultiForward("aes_player_leveldown",ET_IGNORE,FP_CELL,FP_CELL,FP_CELL)
 	
+	register_srvcmd("aes_import","ImportFromFile")
+	
 	register_dictionary("aes.txt")
 }
+
+#pragma unused max_exp
 
 public plugin_cfg()
 {
@@ -175,7 +185,37 @@ public plugin_cfg()
 	
 	new query[QUERY_LENGTH]
 	
-	if(strcmp(db_type,"sqlite") == 0)
+	
+	if(strcmp(db_type,"mysql") == 0)
+	{
+		SQL_SetAffinity(db_type)
+		
+		formatex(query,charsmax(query),"\
+				CREATE TABLE IF NOT EXISTS `%s` (\
+					`%s` int(11) NOT NULL AUTO_INCREMENT,\
+					`%s` varchar(30) NOT NULL,\
+					`%s` varchar(32) NOT NULL,\
+					`%s` varchar(16) NOT NULL,\
+					`%s` float NOT NULL DEFAULT '0.0',\
+					`%s` int(11) NOT NULL DEFAULT '0',\
+					`%s` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\
+					PRIMARY KEY (%s)\
+				);",
+				
+				tbl_name,
+				
+				row_names[ROW_ID],
+				row_names[ROW_NAME],
+				row_names[ROW_STEAMID],
+				row_names[ROW_IP],
+				row_names[ROW_EXP],
+				row_names[ROW_BONUS],
+				row_names[ROW_LASTUPDATE],
+				
+				row_names[ROW_ID]
+		)
+	}
+	else if(strcmp(db_type,"sqlite") == 0)
 	{
 		SQL_SetAffinity(db_type)
 		
@@ -207,7 +247,7 @@ public plugin_cfg()
 		set_fail_state("invalid ^"aes_sql_driver^" cvar value")
 	}
 	
-	sql = SQL_MakeDbTuple(host,user,pass,db)
+	sql = SQL_MakeDbTuple(host,user,pass,db,5)
 	
 	// отправляем запрос на создание таблицы
 	if(get_pcvar_num(cvar[CVAR_SQL_CREATE_DB]))
@@ -235,14 +275,143 @@ public plugin_cfg()
 	
 	if(levels_list)
 		levels_count = ArraySize(levels_list)
+}
+
+//
+// Функция импорта в БД из файла stats.ini
+//
+public ImportFromFile()
+{
+	new fPath[256],len
+	len = get_datadir(fPath,charsmax(fPath))
+		
+	len += formatex(fPath[len],charsmax(fPath) - len,"/aes/stats.ini")
 	
-	register_clcmd("t1","t1")
-	register_clcmd("t2","t2")
-	register_clcmd("t3","t3")
-	register_clcmd("t4","t4")
-	register_clcmd("t5","t5")
-	register_clcmd("t6","t6")
-	register_clcmd("t7","t7")
+	new f = fopen(fPath,"r")
+	
+	if(!f)
+	{
+		log_amx("^"%s^" doesn't exists",
+			fPath)
+		
+		return false
+	}
+	
+	new query[QUERY_LENGTH],sql_data[2] = SQL_DUMMY
+	
+	
+	log_amx("import started")
+	log_amx("clearing ^"%s^" table",
+		tbl_name)
+	
+	// очищаем таблицу перед началом импорта
+	formatex(query,charsmax(query),"DELETE FROM `%s` WHERE 1;",
+		tbl_name)
+	SQL_ThreadQuery(sql,"SQL_Handler",query,sql_data,sizeof sql_data)
+	
+	new track_field
+	
+	// сверяем track_id
+	switch(get_pcvar_num(cvar[CVAR_RANK]))
+	{
+		case 0: // статистика по нику
+		{
+			track_field = ROW_NAME
+		}
+		case 1: // статистика по steamid
+		{
+			track_field = ROW_STEAMID
+		}
+		case 2: // статистика по ip
+		{
+			track_field = ROW_IP
+		}
+		default:
+		{
+			return false
+		}
+	}
+	
+	while(!feof(f))
+	{
+		new buffer[512]
+		fgets(f,buffer,charsmax(buffer))
+		trim(buffer)
+		
+		if(!buffer[0] || buffer[0] == ';')
+			continue
+		
+		new trackId[MAX_NAME_LENGTH * 3],userName[MAX_NAME_LENGTH * 3],sStats[4][12],import_data[31]
+		import_data[0] = SQL_IMPORT
+		
+		parse(buffer,trackId,charsmax(trackId),
+			userName,charsmax(userName),
+			sStats[0],charsmax(sStats[]),
+			sStats[3],charsmax(sStats[]),
+			sStats[1],charsmax(sStats[]),
+			sStats[2],charsmax(sStats[])
+		)
+		
+		copy(import_data[1],charsmax(import_data) - 1,trackId)
+		
+		mysql_escape_string(trackId,charsmax(trackId))
+		mysql_escape_string(userName,charsmax(userName))
+		
+		new lastdate[40]
+		format_time(lastdate,charsmax(lastdate),"%Y-%m-%d %H:%M:%S",str_to_num(sStats[2]))
+		
+		// строим запрос на импорит
+		if(track_field != ROW_NAME)
+		{
+			len = formatex(query,charsmax(query),"INSERT INTO `%s` (`%s`,`%s`,`%s`,`%s`,`%s`)\
+				VALUES('%s','%s','%.2f','%d','%s');",
+				
+				tbl_name,
+				
+				row_names[track_field],
+				row_names[ROW_NAME],
+				row_names[ROW_EXP],
+				row_names[ROW_BONUS],
+				row_names[ROW_LASTUPDATE],
+				
+				trackId,
+				userName,
+				str_to_float(sStats[0]),
+				str_to_num(sStats[1]),
+				lastdate
+			)
+		}
+		else
+		{
+			len = formatex(query,charsmax(query),"INSERT INTO `%s` (`%s`,`%s`,`%s`,`%s`)\
+				VALUES('%s','%.2f','%d','%s');",
+				
+				tbl_name,
+				
+				row_names[track_field],
+				row_names[ROW_EXP],
+				row_names[ROW_BONUS],
+				row_names[ROW_LASTUPDATE],
+				
+				trackId,
+				str_to_float(sStats[0]),
+				str_to_num(sStats[1]),
+				lastdate
+			)
+		}
+		
+		SQL_ThreadQuery(sql,"SQL_Handler",query,import_data,sizeof import_data)
+	}
+	
+	sql_data[0] = SQL_IMPORTFINISH
+	
+	// запрос при окончании импорта
+	formatex(query,charsmax(query),"SELECT COUNT(*) FROM `%s`",tbl_name)
+	SQL_ThreadQuery(sql,"SQL_Handler",query,sql_data,sizeof sql_data)
+	
+	fclose(f)
+	
+	return true
 }
 
 public t1(id)
@@ -292,7 +461,7 @@ public client_putinserver(id)
 //
 // Сохраняем данные на дисконнекте
 //
-public client_disconnect(id)
+public client_disconnected(id)
 {
 	DB_SavePlayerData(id)
 }
@@ -435,10 +604,6 @@ Level_GetByExp(Float:exp)
 		// ищем уровень по опыту
 		if(exp < ArrayGetCell(levels_list,i))
 		{
-			server_print("--> [LIST] %d %d %.2f",
-				i,exp,ArrayGetCell(levels_list,i)
-			)
-			
 			return clamp(i  - 1,0,levels_count - 1)
 		}
 	}
@@ -788,6 +953,27 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 				)
 			}
 		}
+		case SQL_IMPORT:
+		{
+			log_amx("imported ^"%s^" with new id ^"%d^"",
+				data[1],
+				SQL_GetInsertId(sqlQue)
+			)
+		}
+		case SQL_IMPORTFINISH:
+		{
+			log_amx("import finished. %d entries imported.",
+				SQL_ReadResult(sqlQue,0)
+			)
+			
+			new players[MAX_PLAYERS],pnum
+			get_players(players,pnum)
+			
+			for(new i ; i < pnum ; i++)
+			{
+				DB_LoadPlayerData(players[i])
+			}
+		}
 	}
 	
 	return PLUGIN_HANDLED
@@ -806,14 +992,6 @@ if (!(0 < %1 <= MaxClients)) \
 
 public plugin_natives()
 {
-	/*
-		aes_set_player_exp
-		aes_get_player_exp
-		
-		aes_get_player_bonus
-		aes_set_player_bonus
-	*/
-	
 	register_library("aes")
 	
 	register_native("aes_set_player_exp","_aes_set_player_exp",true)
@@ -827,6 +1005,7 @@ public plugin_natives()
 	register_native("aes_get_level_name","_aes_get_level_name")
 	register_native("aes_get_exp_level","_aes_get_exp_level",true)
 	register_native("aes_get_level_reqexp","_aes_get_level_reqexp",true)
+	register_native("aes_find_stats_thread","_aes_find_stats_thread")
 	
 	// 0.4 DEPRECATED
 	register_library("aes_main")
@@ -841,6 +1020,12 @@ public plugin_natives()
 	register_native("aes_get_exp_to_next_level","_aes_get_exp_to_next_level",true)
 }
 
+//native aes_find_stats_thread(Array:track_ids,callback[]);
+public _aes_find_stats_thread(plugin_id,params)
+{
+	
+}
+
 public _aes_set_player_exp(id,Float:exp,bool:no_forward,bool:force)
 {
 	CHECK_PLAYER(id)
@@ -850,6 +1035,12 @@ public _aes_set_player_exp(id,Float:exp,bool:no_forward,bool:force)
 public _aes_get_player_exp(id)
 {
 	CHECK_PLAYER(id)
+	
+	if(player_data[id][PLAYER_LOADSTATE] != LOAD_OK)
+	{
+		return _:-1.0
+	}
+	
 	return _:player_data[id][PLAYER_EXP]
 }
 
