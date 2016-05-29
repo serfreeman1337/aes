@@ -10,10 +10,15 @@
 #define PLUGIN "Advanced Experience System"
 #define VERSION "0.5 Vega"
 #define AUTHOR "serfreeman1337"
-#define LASTUPDATE "02, May (05), 2016"
+#define LASTUPDATE "29, May (05), 2016"
 
 #if AMXX_VERSION_NUM < 183
+	#define MAX_NAME_LENGTH	32
+	#define MAX_PLAYERS	32
+	#define argbreak	strbreak
 	#define client_disconnected client_disconnect
+	
+	new MaxClients
 #endif
 
 //
@@ -160,6 +165,10 @@ public plugin_init()
 	register_srvcmd("aes_import","ImportFromFile")
 	
 	register_dictionary("aes.txt")
+	
+	#if AMXX_VERSION_NUM < 183
+		MaxClients = get_maxplayers()
+	#endif
 }
 
 #pragma unused max_exp
@@ -503,7 +512,7 @@ Player_SetExp(id,Float:new_exp,bool:no_forward = false,bool:force = false)
 		new_exp = 0.0
 	
 	new rt = RT_OK
-	player_data[id][PLAYER_EXP] = new_exp
+	player_data[id][PLAYER_EXP] = _:new_exp
 	
 	// понижение по уровню
 	if(new_exp < player_data[id][PLAYER_EXP_TO_NEXT])
@@ -521,8 +530,8 @@ Player_SetExp(id,Float:new_exp,bool:no_forward = false,bool:force = false)
 	{
 		new old_level = player_data[id][PLAYER_LEVEL]
 		new level = player_data[id][PLAYER_LEVEL] = Level_GetByExp(new_exp)
-		player_data[id][PLAYER_LEVELEXP] = Level_GetExp(player_data[id][PLAYER_LEVEL])
-		player_data[id][PLAYER_EXP_TO_NEXT] = Level_GetExpToNext(player_data[id][PLAYER_LEVEL])
+		player_data[id][PLAYER_LEVELEXP] = _:Level_GetExp(player_data[id][PLAYER_LEVEL])
+		player_data[id][PLAYER_EXP_TO_NEXT] = _:Level_GetExpToNext(player_data[id][PLAYER_LEVEL])
 		
 		if(!no_forward)
 		{
@@ -586,10 +595,10 @@ Player_SetLevel(id,level,bool:force = false)
 		return false
 	}
 	
-	player_data[id][PLAYER_EXP] = exp
+	player_data[id][PLAYER_EXP] = _:exp
 	player_data[id][PLAYER_LEVEL] = level
-	player_data[id][PLAYER_LEVELEXP] = Level_GetExp(player_data[id][PLAYER_LEVEL])
-	player_data[id][PLAYER_EXP_TO_NEXT] = Level_GetExpToNext(player_data[id][PLAYER_LEVEL])
+	player_data[id][PLAYER_LEVELEXP] = _:Level_GetExp(player_data[id][PLAYER_LEVEL])
+	player_data[id][PLAYER_EXP_TO_NEXT] = _:Level_GetExpToNext(player_data[id][PLAYER_LEVEL])
 	
 	return true
 }
@@ -748,7 +757,7 @@ DB_SavePlayerData(id,bool:reload = false)
 					_:diffexp >= 0 ? diffexp + 0.005 : diffexp - 0.005
 				)
 				
-				player_data[id][PLAYER_EXPLAST] = player_data[id][PLAYER_EXP]
+				player_data[id][PLAYER_EXPLAST] = _:player_data[id][PLAYER_EXP]
 				
 				to_save ++
 			}
@@ -889,7 +898,7 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 				SQL_ReadResult(sqlQue,ROW_EXP,exp)
 				Player_SetExp(id,exp,true)
 				
-				player_data[id][PLAYER_EXPLAST] = player_data[id][PLAYER_EXP]
+				player_data[id][PLAYER_EXPLAST] = _:player_data[id][PLAYER_EXP]
 				
 				player_data[id][PLAYER_BONUS] = player_data[id][PLAYER_BONUSLAST] = SQL_ReadResult(sqlQue,ROW_BONUS)
 				
