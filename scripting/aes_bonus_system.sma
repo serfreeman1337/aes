@@ -48,7 +48,11 @@ enum _:itemFieldsStruct {
 	IB_POINTS,
 	Array:IB_LEVELS,
 	Array:IB_CHANCE,
-	bool:IB_SUMCHANCE
+	bool:IB_SUMCHANCE,
+	
+	Float:IB_EXP,
+	IB_LEVEL,
+	IB_ROUND
 }
 
 enum _:menuFieldsStruct {
@@ -86,6 +90,9 @@ enum _:cvars_num {
 }
 
 new cvar[cvars_num]
+new items_CB
+
+new iRound
 
 public plugin_init(){
 	register_plugin(PLUGIN, VERSION, AUTHOR)
@@ -110,6 +117,8 @@ public plugin_init(){
 
 // слишком мощный код
 public plugin_cfg(){
+	items_CB = menu_makecallback("Format_ItemsCallback")
+	
 	new fPath[256],len
 	len += get_configsdir(fPath,charsmax(fPath))
 	len += formatex(fPath[len],charsmax(fPath) - len,"/aes/bonus.ini",fPath)
@@ -146,7 +155,11 @@ public plugin_cfg(){
 		KEY_MENU_TITLE,
 		KEY_MENU_SAY,
 		KEY_MENU_CONSOLE,
-		KEY_MENU_ITEMS
+		KEY_MENU_ITEMS,
+		
+		KEY_EXP,
+		KEY_LEVEL,
+		KEY_ROUND
 	}
 	
 	new Trie:keyMap = TrieCreate()
@@ -164,6 +177,10 @@ public plugin_cfg(){
 	TrieSetCell(keyMap,"say",KEY_MENU_SAY)
 	TrieSetCell(keyMap,"console",KEY_MENU_CONSOLE)
 	TrieSetCell(keyMap,"list",KEY_MENU_ITEMS)
+	
+	TrieSetCell(keyMap,"exp",KEY_EXP)
+	TrieSetCell(keyMap,"level",KEY_LEVEL)
+	TrieSetCell(keyMap,"round",KEY_ROUND)
 	
 	// читаем содержимое файла конфигурации
 	while(!feof(f)){
@@ -189,9 +206,9 @@ public plugin_cfg(){
 			
 			if(strcmp(buffer,"[spawn]") == 0)		// бонусы на спавне
 				cfgBlock = BONUS_ITEM_SPAWN
-			else if(strcmp(buffer,"[bonus_items]") == 0)	// бонусы в меню
+			else if(strcmp(buffer,"[items]") == 0)	// бонусы в меню
 				cfgBlock = BONUS_ITEM_MENU
-			else if(strcmp(buffer,"[bonus_menus]") == 0)	// менюшки	
+			else if(strcmp(buffer,"[menu]") == 0)	// менюшки	
 				cfgBlock = BONUS_MENUS
 	
 			continue
@@ -308,6 +325,10 @@ public plugin_cfg(){
 			case KEY_MENU_CONSOLE: copy(menuData[MENU_CONCMD],charsmax(menuData[MENU_CONCMD]),value)
 			// список предметов в меню
 			case KEY_MENU_ITEMS: menuData[MENU_LIST] = parse_levels(value)
+			
+			case KEY_EXP: itemData[IB_EXP] = str_to_float(value)
+			case KEY_LEVEL: itemData[IB_LEVEL] = str_to_num(value)
+			case KEY_ROUND: itemData[IB_ROUND] = str_to_num(value)
 		}
 	}
 	
@@ -370,9 +391,24 @@ public plugin_cfg(){
 	if(get_pcvar_num(cvar[CVAR_BONUS_SPAWN]) == 2){
 		if(cstrike_running()){
 			register_logevent("ResetSpawn",2,"1=Round_End")
+			
+			register_logevent("RoundStart",2,"0=World triggered","1=Round_Start")
+			register_logevent("RoundRestart",2,"0=World triggered","1=Game_Commencing")
+			register_event("TextMsg","RoundRestart","a","2&#Game_will_restart_in")
+			
 			server_print("--> registred")
 		}
 	}
+}
+
+public RoundRestart()
+{
+	iRound = 0
+}
+
+public RoundStart()
+{
+	iRound ++
 }
 
 
@@ -453,6 +489,9 @@ public Format_BonusMenu(id,cmdId){
 	
 	new player_bonus = aes_get_player_bonus(id)
 	
+	new player_bonus_str[10]
+	num_to_str(player_bonus,player_bonus_str,charsmax(player_bonus_str))
+	
 	if(player_bonus <= 0){ // еще какая-то проверка
 		client_print_color(id,0,"%L %L",id,"AES_TAG",id,"AES_ANEW_NOT")
 		
@@ -477,14 +516,17 @@ public Format_BonusMenu(id,cmdId){
 			num_to_str(i,itemInfo,charsmax(itemInfo))
 			aes_get_item_name(itemData[IB_NAME],itemName,charsmax(itemName),id)
 			
-			menu_additem(m,itemName,itemInfo)
+			menu_additem(m,itemName,itemInfo,.callback = items_CB)
 		}
 	}else{
-		new menuData[menuFieldsStruct],itemIndex,len
+		new menuData[menuFieldsStruct],itemIndex
 		ArrayGetArray(g_BonusMenus,cmdId,menuData)
 
-		len = aes_get_item_name(menuData[MENU_TITLE],itemName,charsmax(itemName),id)
-		len +=formatex(itemName[len],charsmax(itemName) - len," \y(\r%d\y)",player_bonus)
+		new len = formatex(itemName,charsmax(itemName),"%L ",id,"AES_TAG_MENU")
+		len += aes_get_item_name(menuData[MENU_TITLE],itemName[len],charsmax(itemName) - len,id)
+		
+		replace_all(itemName,charsmax(itemName),"\n","^n")
+		replace_all(itemName,charsmax(itemName),"<p>",player_bonus_str)
 		
 		m = menu_create(itemName,"aNew_MenuHandler")
 		
@@ -498,15 +540,99 @@ public Format_BonusMenu(id,cmdId){
 			num_to_str(i,itemInfo,charsmax(itemInfo))
 			aes_get_item_name(itemData[IB_NAME],itemName,charsmax(itemName),id)
 			
-			menu_additem(m,itemName,itemInfo)
+			menu_additem(m,itemName,itemInfo,.callback = items_CB)
 		}
 	}
 	
 	
 	if(m != -1)
+	{
+		F_Format_NavButtons(id,m)
 		menu_display(id,m)
+	}
 	
 	return PLUGIN_CONTINUE
+}
+
+//
+// Хандлер итемов в меню
+//
+public Format_ItemsCallback(id,menu,item)
+{
+	new info[10],item_name[256],dummy
+	menu_item_getinfo(menu,item,dummy,info,charsmax(info),item_name,charsmax(item_name),dummy)
+	
+	new itemData[itemFieldsStruct]
+	ArrayGetArray(g_PointsBonusItems,str_to_num(info),itemData)
+	
+	// проверяем доступность по бонусам
+	new player_bonus = aes_get_player_bonus(id)
+	
+	if(itemData[IB_POINTS] > player_bonus)
+	{
+		new tmpLang[128]
+		formatex(tmpLang,charsmax(tmpLang)," %L",id,"AES_ANEW_INFO1",itemData[IB_POINTS])
+		add(item_name,charsmax(item_name),tmpLang)
+		
+		menu_item_setname(menu,item,item_name)
+		
+		return ITEM_DISABLED
+	}
+	
+	// проверяем доступность по опыту
+	new Float:player_exp = aes_get_player_exp(id)
+	
+	if(itemData[IB_EXP] > player_exp)
+	{
+		new tmpLang[128]
+		formatex(tmpLang,charsmax(tmpLang)," %L",id,"AES_ANEW_INFO2",itemData[IB_EXP])
+		add(item_name,charsmax(item_name),tmpLang)
+		
+		menu_item_setname(menu,item,item_name)
+		
+		return ITEM_DISABLED
+	}
+	
+	// проверяем доступность по уровню
+	new player_level = aes_get_player_level(id) + 1
+	
+	if(itemData[IB_LEVEL] > player_level)
+	{
+		new tmpLang[128]
+		formatex(tmpLang,charsmax(tmpLang)," %L",id,"AES_ANEW_INFO3",itemData[IB_LEVEL])
+		add(item_name,charsmax(item_name),tmpLang)
+		
+		menu_item_setname(menu,item,item_name)
+		
+		return ITEM_DISABLED
+	}
+	
+	// проверяем доступность по раунду
+	if(itemData[IB_ROUND] > iRound)
+	{
+		new tmpLang[128]
+		formatex(tmpLang,charsmax(tmpLang)," %L",id,"AES_ANEW_INFO4",itemData[IB_ROUND])
+		add(item_name,charsmax(item_name),tmpLang)
+		
+		menu_item_setname(menu,item,item_name)
+		
+		return ITEM_DISABLED
+	}
+	
+	return ITEM_ENABLED
+}
+
+public F_Format_NavButtons(id,menu){
+	new tmpLang[20]
+	
+	formatex(tmpLang,charsmax(tmpLang),"%L",id,"BACK")
+	menu_setprop(menu,MPROP_BACKNAME,tmpLang)
+	
+	formatex(tmpLang,charsmax(tmpLang),"%L",id,"EXIT")
+	menu_setprop(menu,MPROP_EXITNAME,tmpLang)
+	
+	formatex(tmpLang,charsmax(tmpLang),"%L",id,"MORE")
+	menu_setprop(menu,MPROP_NEXTNAME,tmpLang)
 }
 
 //
@@ -514,6 +640,12 @@ public Format_BonusMenu(id,cmdId){
 //
 public aNew_MenuHandler(id,m,item){
 	if(item == MENU_EXIT){
+		menu_destroy(m)
+		return PLUGIN_HANDLED
+	}
+	
+	if(Format_ItemsCallback(id,m,item) != ITEM_ENABLED)
+	{
 		menu_destroy(m)
 		return PLUGIN_HANDLED
 	}

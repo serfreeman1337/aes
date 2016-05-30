@@ -103,6 +103,8 @@ public plugin_init(){
 public plugin_cfg(){
 	cvar[CVAR_RANK] = get_cvar_pointer("aes_track_mode")
 	
+	server_print("--> FOUND CVAR %d",cvar[CVAR_RANK])
+	
 	if((cvar[CVAR_RANK] = get_cvar_pointer("aes_track_mode")) == 0)
 	{
 		set_fail_state("cvar ^"aes_track_mode^" not found")
@@ -144,7 +146,7 @@ public plugin_cfg(){
 	get_pcvar_string(cvar[CVAR_ANEW_HE],levelString,charsmax(levelString))
 	heArrSize = parse_aes_bonus_values(g_BonusCvars[HE_ARRAY],levelString)
 	
-	if(get_pcvar_num(cvar[CVAR_RANK] == -1))
+	if(get_pcvar_num(cvar[CVAR_RANK])== -1)
 	{
 		RegisterHam(Ham_Spawn,"player","HamHook_PlayerSpawn",true)
 	}

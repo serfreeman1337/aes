@@ -10,7 +10,7 @@
 #define PLUGIN "Advanced Experience System"
 #define VERSION "0.5 Vega"
 #define AUTHOR "serfreeman1337"
-#define LASTUPDATE "29, May (05), 2016"
+#define LASTUPDATE "30, May (05), 2016"
 
 #if AMXX_VERSION_NUM < 183
 	#define MAX_NAME_LENGTH	32
@@ -84,6 +84,19 @@ enum _:player_data_struct
 	PLAYER_LEVEL,				// уровень игрока
 	Float:PLAYER_LEVELEXP,			// опыт для уровня
 	Float:PLAYER_EXP_TO_NEXT		// требуемое кол-во опыта для сл. уровня игроку
+}
+
+enum _:aes_stats_struct
+{
+	AES_S_NAME[MAX_NAME_LENGTH],
+	AES_S_STEAMID[30],
+	AES_S_IP[16],
+	
+	Float:AES_S_EXP,
+	AES_S_LEVEL,
+	AES_S_BONUS,
+	
+	AES_S_ID
 }
 
 enum _:row_ids		// столбцы таблицы
@@ -983,6 +996,47 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 				DB_LoadPlayerData(players[i])
 			}
 		}
+		case SQL_GETSTATS:
+		{
+			new id = data[1]
+			new Array:aes_stats_array = ArrayCreate(aes_stats_struct)
+			new aes_stats[aes_stats_struct]
+			
+			while(SQL_MoreResults(sqlQue))
+			{
+				SQL_ReadResult(sqlQue,ROW_NAME,aes_stats[AES_S_NAME],charsmax(aes_stats[AES_S_NAME]))
+				SQL_ReadResult(sqlQue,ROW_STEAMID,aes_stats[AES_S_STEAMID],charsmax(aes_stats[AES_S_STEAMID]))
+				SQL_ReadResult(sqlQue,ROW_IP,aes_stats[AES_S_IP],charsmax(aes_stats[AES_S_IP]))
+				
+				SQL_ReadResult(sqlQue,ROW_EXP,aes_stats[AES_S_EXP])
+				aes_stats[AES_S_LEVEL] = Level_GetByExp(aes_stats[AES_S_EXP])
+				aes_stats[AES_S_ID] = SQL_ReadResult(sqlQue,ROW_ID)
+				
+				ArrayPushArray(aes_stats_array,aes_stats)
+				
+				SQL_NextRow(sqlQue)
+			}
+			
+			
+			// передаваемые данные
+			new stats_size = (dataSize - 4)
+			new stats_data[32]
+			
+			for(new i ; i < (dataSize - 4) ; i++)
+			{
+				stats_data[i] = data[4 + i]
+			}
+			
+			// callback
+			if(callfunc_begin_i(data[3],data[2]))
+			{
+				callfunc_push_int(id)
+				callfunc_push_int(_:aes_stats_array)
+				callfunc_push_array(stats_data,stats_size)
+				
+				callfunc_end()
+			}
+		}
 	}
 	
 	return PLUGIN_HANDLED
@@ -1029,10 +1083,114 @@ public plugin_natives()
 	register_native("aes_get_exp_to_next_level","_aes_get_exp_to_next_level",true)
 }
 
-//native aes_find_stats_thread(Array:track_ids,callback[]);
+// native aes_find_stats_thread(Array:track_ids,callback[]);
 public _aes_find_stats_thread(plugin_id,params)
 {
+	new callback_func[32],func_id
+	new id = get_param(1)
+	new Array:track_ids = Array:get_param(2)
+	get_string(3,callback_func,charsmax(callback_func))
+	func_id = get_func_id(callback_func,plugin_id)
 	
+	// неверно указана функция на callback
+	if(func_id == INVALID_PLUGIN_ID)
+	{
+		log_error(AMX_ERR_NATIVE,"invalid callback function ^"%s^"",callback_func)
+		return false
+	}
+	
+	new stats_data[32],stats_size
+	
+	// передаваемые данные
+	if(params == 5)
+	{
+		stats_size = get_param(5)
+		
+		// лул
+		if(stats_size > sizeof stats_data)
+		{
+			log_error(AMX_ERR_NATIVE,"maximum data size is %d",sizeof stats_data)
+			return false
+		}
+		
+		get_array(4,stats_data,stats_size)
+	}
+	
+	
+	
+	new length = ArraySize(track_ids)
+	
+	// не обрабатываем пустой массив
+	if(!length)
+	{
+		log_error(AMX_ERR_NATIVE,"passed empty track_ids array")
+		return false
+	}
+	
+	// строим запрос
+	new query[QUERY_LENGTH],len
+	
+	len += formatex(query,charsmax(query) - len,"SELECT * FROM `%s` WHERE ",
+		tbl_name
+	)
+	
+	switch(get_pcvar_num(cvar[CVAR_RANK]))
+	{
+		case 0: // статистика по нику
+		{
+			len += formatex(query[len],charsmax(query)-len,"`%s` IN(",
+				row_names[ROW_NAME]
+			)
+		}
+		case 1: // статистика по steamid
+		{
+			len += formatex(query[len],charsmax(query)-len,"`%s` IN(",
+				row_names[ROW_STEAMID]
+			)
+		}
+		case 2: // статистика по ip
+		{
+			len += formatex(query[len],charsmax(query)-len,"`%s` IN(",
+				row_names[ROW_IP]
+			)
+		}
+		default:
+		{
+			log_error(AMX_ERR_NATIVE,"lol retard admin")
+			return false
+		}
+	}
+	
+	for(new i,id_str[MAX_NAME_LENGTH * 3] ; i < length ; i++)
+	{
+		ArrayGetString(track_ids,i,id_str,charsmax(id_str))
+		mysql_escape_string(id_str,charsmax(id_str))
+		
+		len += formatex(query[len],charsmax(query)-len,"%s'%s'",i == 0 ? "" : ",",id_str)
+	}
+	
+	len += formatex(query[len],charsmax(query)-len,")")
+			
+	
+	new sql_data[4 + sizeof stats_data]
+	
+	sql_data[0] = SQL_GETSTATS
+	sql_data[1] = id
+	sql_data[2] = plugin_id
+	sql_data[3] = func_id
+	
+	// добавляем передаваемые данные
+	if(stats_size)
+	{
+		for(new i ; i < stats_size ; i++)
+		{
+			sql_data[4 + i] = stats_data[i]
+		}
+	}
+	
+	SQL_ThreadQuery(sql,"SQL_Handler",query,sql_data,4 + stats_size)
+	
+	return true
 }
 
 public _aes_set_player_exp(id,Float:exp,bool:no_forward,bool:force)

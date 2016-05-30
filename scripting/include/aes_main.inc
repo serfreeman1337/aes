@@ -12,6 +12,24 @@ enum _:
 }
 
 //
+// Array structure for get stats with aes_find_stats_thread native
+//
+enum _:aes_stats_struct
+{
+	AES_S_NAME[MAX_NAME_LENGTH],
+	AES_S_STEAMID[30],
+	AES_S_IP[16],
+	
+	Float:AES_S_EXP,
+	AES_S_LEVEL,
+	AES_S_BONUS,
+	
+	AES_S_ID
+}
+
+#define AES_MAX_LEVEL_LENGTH 32
+
+//
 // Returns player experience
 //	@player - player id
 //	
@@ -116,6 +134,19 @@ native aes_get_exp_level(Float:exp)
 native Float:aes_get_level_reqexp(level)
 
 //
+// Thread search for aes stats witch given array track_ids
+//	@id - player id
+//	@track_ids - dynamic array with track ids for search
+//	@callback - your callback function
+//		public my_callback(id,Array:aes_stats,stats_data[])
+//	@data[] - custom data
+//	@data_size - custom data size
+//
+//	@return - true or false
+//
+native aes_find_stats_thread(id = 0,Array:track_ids,callback[],data[] = "",datasize = 0)
+
+//
 // Called on player level up.
 //
 forward aes_player_levelup(id,new_level,old_level)
@@ -140,24 +171,39 @@ enum _: {
 	AES_ST_END
 }
 
-#pragma deprecated Use aes_add_player_exp_f() instead.
+#if AMXX_VERSION_NUM >= 183
+	#pragma deprecated Use aes_add_player_exp_f() instead.
+#endif
 native aes_add_player_exp(id,exp,override = 0)
 
-#pragma deprecated Use aes_add_player_bonus_f() instead.	
+#if AMXX_VERSION_NUM >= 183
+	#pragma deprecated Use aes_add_player_bonus_f() instead.	
+#endif
 native aes_add_player_bonus(id,bonus)
 
-#pragma deprecated Use aes_get_player_*() instead.
+#if AMXX_VERSION_NUM >= 183
+	#pragma deprecated Use aes_get_player_*() instead.
+#endif
 native aes_get_player_stats(id,data[4])
 
-#pragma deprecated Use aes_set_player_*() instead.
+#if AMXX_VERSION_NUM >= 183
+	#pragma deprecated Use aes_set_player_*() instead.
+#endif
 native aes_set_player_stats(id,stats[3])
 
-#pragma deprecated Use aes_get_exp_level() instead.
+#if AMXX_VERSION_NUM >= 183
+	#pragma deprecated Use aes_get_exp_level() instead.
+#endif
 native aes_get_level_for_exp(exp)
 
-#pragma deprecated Use aes_get_level_reqexp() instead.
+#if AMXX_VERSION_NUM >= 183
+	#pragma deprecated Use aes_get_level_reqexp() instead.
+#endif
 native aes_get_exp_to_next_level(lvl)
 
+#if AMXX_VERSION_NUM >= 183
+	#pragma deprecated Use aes_find_stats_thread() instead.
+#endif
 native Array:aes_get_stats(Array:trackIds)
 forward aes_on_anew_command(id)
 native aes_get_exp_for_stats(stats[8],stats2[4])
