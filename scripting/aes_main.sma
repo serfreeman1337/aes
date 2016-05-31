@@ -10,12 +10,13 @@
 #define PLUGIN "Advanced Experience System"
 #define VERSION "0.5 Vega"
 #define AUTHOR "serfreeman1337"
-#define LASTUPDATE "30, May (05), 2016"
+#define LASTUPDATE "31, May (05), 2016"
 
 #if AMXX_VERSION_NUM < 183
+	#include <colorchat>
+	
 	#define MAX_NAME_LENGTH	32
 	#define MAX_PLAYERS	32
-	#define argbreak	strbreak
 	#define client_disconnected client_disconnect
 	
 	new MaxClients
@@ -207,7 +208,6 @@ public plugin_cfg()
 	
 	new query[QUERY_LENGTH]
 	
-	
 	if(strcmp(db_type,"mysql") == 0)
 	{
 		SQL_SetAffinity(db_type)
@@ -283,7 +283,30 @@ public plugin_cfg()
 	
 	new levels_string[512],level_str[10]
 	get_pcvar_string(cvar[CVAR_LEVELS],levels_string,charsmax(levels_string))
+	levels_list = ArrayCreate(1)
 	
+	#if AMXX_VERSION_NUM < 183
+	if(levels_string[0])
+	{
+		new e_pos,s_pos
+		
+		do {
+			e_pos = strfind(levels_string[s_pos]," ")
+			
+			formatex(level_str,e_pos,levels_string[s_pos])
+			
+			if(!levels_list)
+			{
+				levels_list = ArrayCreate(1)
+			}
+			
+			ArrayPushCell(levels_list,floatstr(level_str))
+			max_exp = floatstr(level_str)
+			
+			s_pos += e_pos + 1
+		} while (e_pos != -1)
+	}
+	#else
 	while((argbreak(levels_string,level_str,charsmax(level_str),levels_string,charsmax(levels_string))) != -1)
 	{
 		if(!levels_list)
@@ -294,6 +317,7 @@ public plugin_cfg()
 		ArrayPushCell(levels_list,floatstr(level_str))
 		max_exp = floatstr(level_str)
 	}
+	#endif
 	
 	if(levels_list)
 		levels_count = ArraySize(levels_list)
