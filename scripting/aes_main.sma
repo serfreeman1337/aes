@@ -27,6 +27,8 @@
 // http://1337.uz/csstatsx-sql/
 //
 
+ #pragma dynamic 32768
+
 // -- КОНСТАНТЫ -- //
 
 enum _:sql_que_type	// тип sql запроса
@@ -60,6 +62,7 @@ enum _:cvars
 	CVAR_SQL_DB,
 	CVAR_SQL_TABLE,
 	CVAR_SQL_CREATE_DB,
+	CVAR_SQL_MAXFAIL,
 	
 	CVAR_RANK,
 	CVAR_RANKBOTS,
@@ -130,7 +133,7 @@ new const row_names[row_ids][] = // имена столбцов
 	"last_update"
 }
 
-const QUERY_LENGTH =	1472
+const QUERY_LENGTH =	1472		// мой ммр, когда я катаю пати
 
 // -- ПЕРЕМЕННЫЕ --
 new player_data[MAX_PLAYERS + 1][player_data_struct]
@@ -138,6 +141,7 @@ new cvar[cvars]
 
 new tbl_name[32]
 new Handle:sql
+new cnt_sqlfail,bool:gg_sql
 
 new Array:levels_list
 new levels_count
@@ -145,6 +149,9 @@ new Float:max_exp
 
 new FW_LevelUp,FW_LevelDown
 new dummy
+
+new flush_que[QUERY_LENGTH * 3],flush_que_len
+new const task_flush		=	11337
 
 public plugin_init()
 {
@@ -164,6 +171,7 @@ public plugin_init()
 	cvar[CVAR_SQL_PASS] = register_cvar("aes_sql_pass","",FCVAR_UNLOGGED|FCVAR_PROTECTED)
 	cvar[CVAR_SQL_DB] = register_cvar("aes_sql_name","amxx",FCVAR_UNLOGGED|FCVAR_PROTECTED)
 	cvar[CVAR_SQL_TABLE] = register_cvar("aes_sql_table","aes_stats",FCVAR_UNLOGGED|FCVAR_PROTECTED)
+	cvar[CVAR_SQL_MAXFAIL] = register_cvar("aes_sql_maxfail","10")
 	
 	cvar[CVAR_SQL_CREATE_DB] = register_cvar("aes_sql_create_db","1")
 	
@@ -215,8 +223,8 @@ public plugin_cfg()
 		formatex(query,charsmax(query),"\
 				CREATE TABLE IF NOT EXISTS `%s` (\
 					`%s` int(11) NOT NULL AUTO_INCREMENT,\
-					`%s` varchar(30) NOT NULL,\
 					`%s` varchar(32) NOT NULL,\
+					`%s` varchar(30) NOT NULL,\
 					`%s` varchar(16) NOT NULL,\
 					`%s` float NOT NULL DEFAULT '0.0',\
 					`%s` int(11) NOT NULL DEFAULT '0',\
@@ -269,7 +277,7 @@ public plugin_cfg()
 		set_fail_state("invalid ^"aes_sql_driver^" cvar value")
 	}
 	
-	sql = SQL_MakeDbTuple(host,user,pass,db,5)
+	sql = SQL_MakeDbTuple(host,user,pass,db,3)
 	
 	// отправляем запрос на создание таблицы
 	if(get_pcvar_num(cvar[CVAR_SQL_CREATE_DB]))
@@ -492,7 +500,40 @@ public t6(id)
 
 public t7(id)
 {
-	Player_SetExp(id,322.0)
+	new players[32],pnum
+	get_players(players,pnum)
+	
+	log_amx("-> DO IT!")
+	
+	for(new i ; i < pnum ; i++)
+	{
+		new random_bonus = random_num(0,1337)
+		new Float:random_exp = random_float(0.0,1337.0)
+		
+		Player_SetExp(players[i],
+			random_exp,
+			false,
+			true
+		)
+		
+		Player_SetBonus(players[i],
+			random_bonus,
+			true
+		)
+		
+		new name[32]
+		get_user_name(players[i],name,charsmax(name))
+		
+		log_amx("--> %s FOR %.2f %d",
+			name,
+			random_exp,
+			random_bonus
+		)
+		
+		
+		
+		DB_SavePlayerData(players[i])
+	}
 }
 
 //
@@ -500,7 +541,6 @@ public t7(id)
 //
 public client_putinserver(id)
 {
-	arrayset(player_data[id],0,player_data_struct)
 	DB_LoadPlayerData(id)
 }
 
@@ -693,6 +733,12 @@ Float:Level_GetExp(level)
 //
 DB_LoadPlayerData(id)
 {
+	// проблемы с соединением
+	if(gg_sql)
+	{
+		return false
+	}
+	
 	// пропускаем HLTV
 	if(is_user_hltv(id))
 	{
@@ -705,7 +751,9 @@ DB_LoadPlayerData(id)
 		return false
 	}
 	
-	get_user_info(id,"name",player_data[id][PLAYER_NAME],charsmax(player_data[][PLAYER_NAME]))
+	arrayset(player_data[id],0,player_data_struct)
+	
+	get_user_info(id,"name",player_data[id][PLAYER_NAME],MAX_NAME_LENGTH - 1)
 	mysql_escape_string(player_data[id][PLAYER_NAME],charsmax(player_data[][PLAYER_NAME]))
 	
 	get_user_authid(id,player_data[id][PLAYER_STEAMID],charsmax(player_data[][PLAYER_STEAMID]))
@@ -757,12 +805,18 @@ DB_LoadPlayerData(id)
 //
 DB_SavePlayerData(id,bool:reload = false)
 {
+	// проблемы с соединением
+	if(gg_sql)
+	{
+		return false
+	}
+	
 	if(player_data[id][PLAYER_LOADSTATE] < LOAD_OK) // игрок не загрузился
 	{
 		return false
 	}
 	
-	new query[QUERY_LENGTH]
+	new query[QUERY_LENGTH],len
 	
 	new sql_data[2]
 	sql_data[1] = id
@@ -778,13 +832,12 @@ DB_SavePlayerData(id,bool:reload = false)
 			
 			sql_data[0] = SQL_UPDATE
 			
-			new len,to_save
+			new to_save
 			
 			len += formatex(query[len],charsmax(query) - len,"UPDATE `%s` SET",tbl_name)
 			
 			new Float:diffexp = player_data[id][PLAYER_EXP] - player_data[id][PLAYER_EXPLAST]
 			new diffbonus = player_data[id][PLAYER_BONUS] - player_data[id][PLAYER_BONUSLAST]
-			
 			
 			if(diffexp != 0.0)
 			{
@@ -881,8 +934,61 @@ DB_SavePlayerData(id,bool:reload = false)
 	
 	if(query[0])
 	{
-		log_amx("[%s]",query)
+		switch(sql_data[0])
+		{
+			// накапливаем запросы 
+			case SQL_UPDATE:
+			{
+				// запросов достаточно, сбрасываем их
+				DB_AddQuery(query,len)
+				
+				return true
+			}
+		}
+		
 		SQL_ThreadQuery(sql,"SQL_Handler",query,sql_data,sizeof sql_data)
+	}
+	
+	return true
+}
+
+DB_AddQuery(query[],len)
+{
+	if((flush_que_len + len + 1) > charsmax(flush_que))
+	{
+		DB_FlushQuery()
+	}
+	
+	flush_que_len += formatex(
+		flush_que[flush_que_len],
+		charsmax(flush_que) - flush_que_len,
+		"%s%s",flush_que_len ? ";" : "",
+		query
+	)
+		
+	// задание на сброс накопленных запросов
+	remove_task(task_flush)
+	set_task(0.1,"DB_FlushQuery",task_flush)
+}
+
+//
+// Сброс накопленных запросов
+//
+public DB_FlushQuery()
+{
+	if(gg_sql)
+	{
+		return false
+	}
+	
+	if(flush_que_len)
+	{
+		new sql_data[1] = SQL_UPDATE
+		SQL_ThreadQuery(sql,"SQL_Handler",flush_que,sql_data,sizeof sql_data)
+		
+		log_amx("FLUSH %d",flush_que_len)
+		
+		flush_que_len = 0
 	}
 	
 	return true
@@ -899,6 +1005,14 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 			log_amx("SQL connection failed")
 			log_amx("[ %d ] %s",errNum,err)
 			
+			cnt_sqlfail ++
+			
+			if(cnt_sqlfail >= get_pcvar_num(cvar[CVAR_SQL_MAXFAIL]) && !gg_sql)
+			{
+				log_amx("db query is disabled for this map")
+				gg_sql = true
+			}
+			
 			return PLUGIN_HANDLED
 		}
 		case TQUERY_QUERY_FAILED:
@@ -909,6 +1023,14 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 			log_amx("SQL query failed")
 			log_amx("[ %d ] %s",errNum,err)
 			log_amx("[ SQL ] [%s]",lastQue)
+			
+			cnt_sqlfail ++
+			
+			if(cnt_sqlfail >= get_pcvar_num(cvar[CVAR_SQL_MAXFAIL]) && !gg_sql)
+			{
+				log_amx("db query is disabled for this map")
+				gg_sql = true
+			}
 			
 			return PLUGIN_HANDLED
 		}
@@ -982,21 +1104,19 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 		}
 		case SQL_UPDATE: // обновление данных
 		{
-			new id = data[1]
+			new players[MAX_PLAYERS],pnum
+			get_players(players,pnum)
 			
-			if(is_user_connected(id))
-			{	
-				if(player_data[id][PLAYER_LOADSTATE] == LOAD_UPDATE)
-				{
-					player_data[id][PLAYER_LOADSTATE] = LOAD_NO
-					DB_LoadPlayerData(id)
-				}
+			for(new i,player ; i < pnum ; i++)
+			{
+				player = players[i]
 				
-				log_amx("UPDATE id: %d, exp: %.2f, bonus: %d",
-					player_data[id][PLAYER_ID],
-					player_data[id][PLAYER_EXPLAST],
-					player_data[id][PLAYER_BONUSLAST]
-				)
+				if(player_data[player][PLAYER_LOADSTATE] == LOAD_UPDATE)
+				{
+					player_data[player][PLAYER_LOADSTATE] = LOAD_NO
+					
+					DB_LoadPlayerData(player)
+				}
 			}
 		}
 		case SQL_IMPORT:
@@ -1020,7 +1140,7 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 				DB_LoadPlayerData(players[i])
 			}
 		}
-		case SQL_GETSTATS:
+		case SQL_GETSTATS: // aes_find_stats
 		{
 			new id = data[1]
 			new Array:aes_stats_array = ArrayCreate(aes_stats_struct)
@@ -1043,7 +1163,7 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 			
 			
 			// передаваемые данные
-			new stats_size = (dataSize - 4)
+			new stats_size = (dataSize - 4) // почему 4? потому что не 3
 			new stats_data[32]
 			
 			for(new i ; i < (dataSize - 4) ; i++)
@@ -1107,9 +1227,13 @@ public plugin_natives()
 	register_native("aes_get_exp_to_next_level","_aes_get_exp_to_next_level",true)
 }
 
-// native aes_find_stats_thread(Array:track_ids,callback[]);
 public _aes_find_stats_thread(plugin_id,params)
 {
+	if(gg_sql)
+	{
+		return false
+	}
+	
 	new callback_func[32],func_id
 	new id = get_param(1)
 	new Array:track_ids = Array:get_param(2)
