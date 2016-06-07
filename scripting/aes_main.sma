@@ -331,6 +331,11 @@ public plugin_cfg()
 		levels_count = ArraySize(levels_list)
 }
 
+public plugin_end()
+{
+	DB_FlushQuery()
+}
+
 //
 // Функция импорта в БД из файла stats.ini
 //
@@ -643,7 +648,11 @@ Player_SetExp(id,Float:new_exp,bool:no_forward = false,bool:force = false)
 // Задаем бонусы игрока
 //
 Player_SetBonus(id,bonus,bool:force = false)
-{
+{	
+	server_print("-->  SET BONUS %d for %d",
+		bonus,id
+	)
+	
 	// статистика на паузе
 	if(get_pcvar_num(cvar[CVAR_PAUSE]) && !force)
 	{
@@ -852,6 +861,8 @@ DB_SavePlayerData(id,bool:reload = false)
 				to_save ++
 			}
 			
+			server_print("--> DIFF BONUS %d",diffbonus)
+			
 			if(diffbonus != 0)
 			{
 				len += formatex(query[len],charsmax(query) - len,"%s`%s` = `%s` + '%d'",
@@ -941,6 +952,10 @@ DB_SavePlayerData(id,bool:reload = false)
 			{
 				// запросов достаточно, сбрасываем их
 				DB_AddQuery(query,len)
+				
+				server_print("--> ADD QUERY ^"%s^"",
+					query
+				)
 				
 				return true
 			}

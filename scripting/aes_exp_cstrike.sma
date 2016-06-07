@@ -4,7 +4,6 @@
 */
 
 #include <amxmodx>
-#include <aes_main>
 #include <cstrike>
 #include <csx>
 #include <hamsandwich>
@@ -16,7 +15,14 @@
 	#define print_team_grey Grey
 	#define print_team_red Red
 	#define print_team_blue Blue
+	
+	#define MAX_NAME_LENGTH	32
+	#define MAX_PLAYERS	32
+	
+	new MaxClients
 #endif
+
+#include <aes_main>
 
 #define PLUGIN "AES: Cstrike Addon"
 #define VERSION "0.5 Vega"
@@ -98,6 +104,10 @@ public plugin_init(){
 	
 	cvar[CVAR_LEVEL_BONUS] = register_cvar("aes_bonus_levelup","3")
 	cvar[CVAR_XP_DEATH] = register_cvar("aes_xp_death","0")
+	
+	#if AMXX_VERSION_NUM < 183
+		MaxClients = get_maxplayers()
+	#endif
 }
 
 public plugin_cfg(){

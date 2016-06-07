@@ -19,6 +19,9 @@
 	#define print_team_grey Grey
 	#define print_team_red Red
 	#define print_team_blue Blue
+	
+	#define MAX_NAME_LENGTH 32
+	#define MAX_PLAYERS 32
 #endif
 
 #include <aes_main>

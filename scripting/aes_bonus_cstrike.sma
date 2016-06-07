@@ -8,12 +8,21 @@
 */
 
 #include <amxmodx>
+
+#if AMXX_VERSION_NUM < 183
+	#include <colorchat>
+	
+	#define print_team_default DontChange
+	#define print_team_grey Grey
+	#define print_team_red Red
+	#define print_team_blue Blue
+	
+	#define MAX_NAME_LENGTH	32
+#endif
+
 #include <cstrike>
 #include <hamsandwich>
 #include <fakemeta_util>
-
-#include <colorchat>
-
 #include <aes_main>
 
 #define PLUGIN "AES: Bonus CSTRIKE"
