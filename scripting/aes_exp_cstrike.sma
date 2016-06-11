@@ -1,5 +1,5 @@
 /*
-*	AES: Cstrike Addon		     v. 0.5
+*	AES: CStrike Addon		     v. 0.5
 *	by serfreeman1337	    http://1337.uz/
 */
 
@@ -19,10 +19,12 @@
 	#define MAX_NAME_LENGTH	32
 	#define MAX_PLAYERS	32
 	
+	#define client_disconnected client_disconnect
+	
 	new MaxClients
 #endif
 
-#include <aes_main>
+#include <aes_v>
 
 #define PLUGIN "AES: CStrike Addon"
 #define VERSION "0.5 Vega"
@@ -77,6 +79,7 @@ new Array: g_BonusCvars[Arrays]
 new frArrSize,hsArrSize,kfArrSize,heArrSize
 
 new bool:isAsMap
+new bool:is_by_stats
 
 new g_Players[MAX_PLAYERS][STREAK_OPT]
 
@@ -112,8 +115,6 @@ public plugin_init(){
 
 public plugin_cfg(){
 	cvar[CVAR_RANK] = get_cvar_pointer("aes_track_mode")
-	
-	server_print("--> FOUND CVAR %d",cvar[CVAR_RANK])
 	
 	if((cvar[CVAR_RANK] = get_cvar_pointer("aes_track_mode")) == 0)
 	{
@@ -159,6 +160,7 @@ public plugin_cfg(){
 	if(get_pcvar_num(cvar[CVAR_RANK])== -1)
 	{
 		RegisterHam(Ham_Spawn,"player","HamHook_PlayerSpawn",true)
+		is_by_stats = true
 	}
 }
 
@@ -181,6 +183,56 @@ public HamHook_PlayerSpawn(id)
 	aes_set_player_exp(id,exp,true,true)
 	
 	return HAM_IGNORED
+}
+
+
+//
+// native Float:aes_get_exp_for_stats_f(stats[8],stats2[4])
+//
+public plugin_natives()
+{
+	register_native("aes_get_exp_for_stats_f","_aes_get_exp_for_stats_f")
+	register_native("aes_get_exp_for_stats","_aes_get_exp_for_stats")
+}
+
+public Float:_aes_get_exp_for_stats_f(plugin_id,params)
+{
+	if(!is_by_stats)
+	{
+		return -1.0
+	}
+	
+	if(params != 2)
+	{
+		log_error(AMX_ERR_NATIVE,"bad arguments num, expected 2, passed %d",params)
+		return 0.0
+	}
+
+	new stats[8],bprelated[4]
+	get_array(1,stats,sizeof stats)
+	get_array(2,bprelated,sizeof bprelated)
+	
+	return get_exp_for_stats(stats,bprelated)
+}
+
+public _aes_get_exp_for_stats(plugin_id,params)
+{
+	if(!is_by_stats)
+	{
+		return -1
+	}
+	
+	if(params != 2)
+	{
+		log_error(AMX_ERR_NATIVE,"bad arguments num, expected 2, passed %d",params)
+		return 0
+	}
+
+	new stats[8],bprelated[4]
+	get_array(1,stats,sizeof stats)
+	get_array(2,bprelated,sizeof bprelated)
+	
+	return floatround(get_exp_for_stats(stats,bprelated))
 }
 
 Float:get_exp_for_stats(stats[8],bprelated[4]){

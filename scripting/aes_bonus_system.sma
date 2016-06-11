@@ -16,10 +16,12 @@
 	
 	#define MAX_NAME_LENGTH	32
 	#define MAX_PLAYERS 32
+	
+	#define client_disconnected client_disconnect
 #endif
 
 #include <amxmisc>
-#include <aes_main>
+#include <aes_v>
 #include <hamsandwich>
 #include <fun>
 
@@ -27,33 +29,42 @@
 #define VERSION "0.5 Vega"
 #define AUTHOR "serfreeman1337"
 
-enum _:itemTypeStruct {
+// РјС‹ РїРµСЂРµРґР°Р»Рё С‚РµР±Рµ РјР°СЃСЃРёРІ РІ РјР°СЃСЃРёРІ
+// С‡С‚РѕР±С‹ С‚С‹ РјРѕРі СЂР°Р±РѕС‚Р°С‚СЊ СЃ РјР°СЃСЃРёРІРѕРј РїРѕРєР° СЂР°Р±РѕС‚Р°РµС€СЊ  СЃ РјР°СЃСЃРёРІРѕРј
+
+enum _:itemTypeStruct 
+{
 	ITEM_GIVE = 1,
 	ITEM_CALL,
 	ITEM_MENU,
 	ITEM_FORWARD
 }
 
-enum _: {
+enum _:
+{
 	BONUS_ITEM_SPAWN,
 	BONUS_ITEM_MENU,
 	BONUS_MENUS
 }
 
-// мы передали тебе массив в массив
-// чтобы ты мог работать с массивом пока работаешь  с массивом
+#define LIMIT_POINTS (1<<1)
+#define	LIMIT_EXP (1<<2)
+#define LIMIT_LEVEL (1<<3)
+#define LIMIT_ROUND (1<<4)
+#define LIMIT_TIME (1<<5)
 
-enum _:itemFieldsStruct {
+enum _:itemFieldsStruct 
+{
 	IB_TYPE,
 	IB_NAME[64],
 	IB_ITEM[30],
 	IB_PLUGIN_ID,
 	IB_FUNCTION_ID,
-	IB_POINTS,
 	Array:IB_LEVELS,
 	Array:IB_CHANCE,
 	bool:IB_SUMCHANCE,
 	
+	IB_POINTS,
 	Float:IB_EXP,
 	IB_LEVEL,
 	IB_ROUND,
@@ -67,7 +78,7 @@ enum _:menuFieldsStruct {
 	Array: MENU_LIST
 }
 
-// Мастер массивов 80 лвл
+// РњР°СЃС‚РµСЂ РјР°СЃСЃРёРІРѕРІ 80 Р»РІР»
 
 new Array:g_SpawnBonusItems
 new Array:g_PointsBonusItems
@@ -84,13 +95,14 @@ new bool:isLocked,iaNewForward
 new bool:player_already_spawned[MAX_PLAYERS + 1]
 new Float:player_spawn_time[MAX_PLAYERS + 1]
 
-// Менюшки
+// РњРµРЅСЋС€РєРё
 new itemName[128],itemInfo[10]
 new Trie:callCmds
 
 // cvars
 
-enum _:cvars_num {
+enum _:cvars_num 
+{
 	CVAR_BONUS_ENABLED,
 	CVAR_BONUS_SPAWN,
 }
@@ -104,15 +116,15 @@ public plugin_init(){
 	register_plugin(PLUGIN, VERSION, AUTHOR)
 	
 	//
-	// Вкл/выкл системы бонусов
+	// Р’РєР»/РІС‹РєР» СЃРёСЃС‚РµРјС‹ Р±РѕРЅСѓСЃРѕРІ
 	//
 	cvar[CVAR_BONUS_ENABLED] = register_cvar("aes_bonus_enable","1",FCVAR_SERVER)
 	
 	//
-	// Выдача бонусов на спавне
-	//	0 - нет бонусов на спавне
-	//	1 - выдавать всегда
-	//	2 - выдать только один раз за раунд
+	// Р’С‹РґР°С‡Р° Р±РѕРЅСѓСЃРѕРІ РЅР° СЃРїР°РІРЅРµ
+	//	0 - РЅРµС‚ Р±РѕРЅСѓСЃРѕРІ РЅР° СЃРїР°РІРЅРµ
+	//	1 - РІС‹РґР°РІР°С‚СЊ РІСЃРµРіРґР°
+	//	2 - РІС‹РґР°С‚СЊ С‚РѕР»СЊРєРѕ РѕРґРёРЅ СЂР°Р· Р·Р° СЂР°СѓРЅРґ
 	cvar[CVAR_BONUS_SPAWN] = register_cvar("aes_bonus_spawn","1")
 	
 	register_srvcmd("aes_lockmap","Check_LockMap")
@@ -123,15 +135,16 @@ public plugin_init(){
 	RegisterHam(Ham_Spawn,"player","On_Player_Spawn",true)
 }
 
-// слишком мощный код
-public plugin_cfg(){
+// СЃР»РёС€РєРѕРј РјРѕС‰РЅС‹Р№ РєРѕРґ
+public plugin_cfg()
+{
 	items_CB = menu_makecallback("Format_ItemsCallback")
 	
 	new fPath[256],len
 	len += get_configsdir(fPath,charsmax(fPath))
 	len += formatex(fPath[len],charsmax(fPath) - len,"/aes/bonus.ini",fPath)
 	
-	// читаем файл конфигурации
+	// С‡РёС‚Р°РµРј С„Р°Р№Р» РєРѕРЅС„РёРіСѓСЂР°С†РёРё
 	new f = fopen(fPath,"r")
 	
 	if(!f){
@@ -144,7 +157,7 @@ public plugin_cfg(){
 	new buffer[1024],cfgBlock = -1,itemType,key[32],value[sizeof buffer - sizeof key],keyId,line
 	new itemData[itemFieldsStruct],menuData[menuFieldsStruct] 
 	
-	// карта ключей параметров
+	// РєР°СЂС‚Р° РєР»СЋС‡РµР№ РїР°СЂР°РјРµС‚СЂРѕРІ
 	enum _:{
 		KEY_NAME = 1,
 		KEY_LEVELMAP,
@@ -187,7 +200,11 @@ public plugin_cfg(){
 	TrieSetCell(keyMap,"round",KEY_ROUND)
 	TrieSetCell(keyMap,"time",KEY_TIME)
 	
-	// читаем содержимое файла конфигурации
+	//
+	// РЇ РќРРҐРЈРЇ РќР• РџРћРќРРњРђР® Р§РўРћ РЇ РўРЈРў РќРђРџРРЎРђР›
+	//
+	
+	// С‡РёС‚Р°РµРј СЃРѕРґРµСЂР¶РёРјРѕРµ С„Р°Р№Р»Р° РєРѕРЅС„РёРіСѓСЂР°С†РёРё
 	while(!feof(f))
 	{
 		fgets(f,buffer,charsmax(buffer))
@@ -198,38 +215,40 @@ public plugin_cfg(){
 		if(!buffer[0] || buffer[0] == ';')
 			continue
 			
-		if(buffer[0] == '['){	// проверяем какой блок конфигурации сейчас читаем
+		if(buffer[0] == '['){	// РїСЂРѕРІРµСЂСЏРµРј РєР°РєРѕР№ Р±Р»РѕРє РєРѕРЅС„РёРіСѓСЂР°С†РёРё СЃРµР№С‡Р°СЃ С‡РёС‚Р°РµРј
 			switch(cfgBlock){
-				case BONUS_ITEM_SPAWN,BONUS_ITEM_MENU: {
+				case BONUS_ITEM_SPAWN,BONUS_ITEM_MENU: 
+				{
 					if(RegisterBonusItem(itemData,cfgBlock,line))
 						arrayset(itemData,0,itemFieldsStruct)
 				}
-				case BONUS_MENUS: {
+				case BONUS_MENUS: 
+				{
 					if(RegisterMenuItem(menuData,line) >= 0)
 						arrayset(menuData,0,menuFieldsStruct)
 				}
 			}
 			
-			if(strcmp(buffer,"[spawn]") == 0)		// бонусы на спавне
+			if(strcmp(buffer,"[spawn]") == 0)		// Р±РѕРЅСѓСЃС‹ РЅР° СЃРїР°РІРЅРµ
 				cfgBlock = BONUS_ITEM_SPAWN
-			else if(strcmp(buffer,"[items]") == 0)	// бонусы в меню
+			else if(strcmp(buffer,"[items]") == 0)	// Р±РѕРЅСѓСЃС‹ РІ РјРµРЅСЋ
 				cfgBlock = BONUS_ITEM_MENU
-			else if(strcmp(buffer,"[menu]") == 0)	// менюшки	
+			else if(strcmp(buffer,"[menu]") == 0)	// РјРµРЅСЋС€РєРё	
 				cfgBlock = BONUS_MENUS
 	
 			continue
 		}
 	
-		// парсинг предметов
+		// РїР°СЂСЃРёРЅРі РїСЂРµРґРјРµС‚РѕРІ
 		if(cfgBlock == -1)
 			continue
 			
-		if(buffer[0] == '<'){	// новый бонус
+		if(buffer[0] == '<'){	// РЅРѕРІС‹Р№ Р±РѕРЅСѓСЃ
 			if(cfgBlock != BONUS_MENUS){
 				if(RegisterBonusItem(itemData,cfgBlock,line))
 					arrayset(itemData,0,itemFieldsStruct)
 			
-				if(strcmp(buffer,"<give>") == 0)	// узнаем тип бонуса
+				if(strcmp(buffer,"<give>") == 0)	// СѓР·РЅР°РµРј С‚РёРї Р±РѕРЅСѓСЃР°
 					itemType = ITEM_GIVE
 				else if(strcmp(buffer,"<call>") == 0)
 					itemType = ITEM_CALL
@@ -239,7 +258,7 @@ public plugin_cfg(){
 				}
 				
 				itemData[IB_TYPE] = itemType
-			}else{ // менюшки
+			}else{ // РјРµРЅСЋС€РєРё
 				if(RegisterMenuItem(menuData,line) >= 0)
 					arrayset(menuData,0,menuFieldsStruct)
 				
@@ -255,7 +274,7 @@ public plugin_cfg(){
 		if(!itemType)
 			continue
 		
-		// парсим ключи
+		// РїР°СЂСЃРёРј РєР»СЋС‡Рё
 		#if AMXX_VERSION_NUM >= 183
 			strtok2(buffer,key,charsmax(key),value,charsmax(value),'=',TRIM_FULL)
 		#else
@@ -263,42 +282,42 @@ public plugin_cfg(){
 			replace(value,charsmax(value),"= ","")
 		#endif	
 		
-		if(!TrieGetCell(keyMap,key,keyId) || (cfgBlock == BONUS_MENUS && keyId < KEY_MENU_TITLE)){ // узнаем ID ключа
+		if(!TrieGetCell(keyMap,key,keyId) || (cfgBlock == BONUS_MENUS && keyId < KEY_MENU_TITLE)){ // СѓР·РЅР°РµРј ID РєР»СЋС‡Р°
 			log_amx("[WARNING] unknown key ^"%s^" on line %d",
 				key,line)
 				
 			continue
 		}
 		
-		// парсинг значений ключей
+		// РїР°СЂСЃРёРЅРі Р·РЅР°С‡РµРЅРёР№ РєР»СЋС‡РµР№
 		switch(keyId){
 			//
-			// Бонус предметы
+			// Р‘РѕРЅСѓСЃ РїСЂРµРґРјРµС‚С‹
 			//
 			
-			// название бонуса
+			// РЅР°Р·РІР°РЅРёРµ Р±РѕРЅСѓСЃР°
 			case KEY_NAME: copy(itemData[IB_NAME],charsmax(itemData[IB_NAME]),value)
-			// бонусы по уровням
+			// Р±РѕРЅСѓСЃС‹ РїРѕ СѓСЂРѕРІРЅСЏРј
 			case KEY_LEVELMAP: itemData[IB_LEVELS] = _:parse_levels(value)
-			// предмет для конструкции <give>
+			// РїСЂРµРґРјРµС‚ РґР»СЏ РєРѕРЅСЃС‚СЂСѓРєС†РёРё <give>
 			case KEY_ITEM: copy(itemData[IB_ITEM],charsmax(itemData[IB_ITEM]),value)
-			// шанс бонуса
+			// С€Р°РЅСЃ Р±РѕРЅСѓСЃР°
 			case KEY_CHANCE: itemData[IB_CHANCE] = _:parse_levels(value)
-			// id плагина для конструкции <call>
+			// id РїР»Р°РіРёРЅР° РґР»СЏ РєРѕРЅСЃС‚СЂСѓРєС†РёРё <call>
 			case KEY_PLUGIN:{
 				itemData[IB_PLUGIN_ID] = find_plugin_byfile(value)
 				
 				if(itemData[IB_PLUGIN_ID] == INVALID_PLUGIN_ID){
 					log_amx("[ERROR] can't find plugin ^"%s^" on line %d",value,line)
 					
-					// убираем этот бонус из меню
+					// СѓР±РёСЂР°РµРј СЌС‚РѕС‚ Р±РѕРЅСѓСЃ РёР· РјРµРЅСЋ
 					itemData[IB_TYPE] = -1
 					itemType = -1
 				}
 			}
-			// id функции для конструкции <call>
+			// id С„СѓРЅРєС†РёРё РґР»СЏ РєРѕРЅСЃС‚СЂСѓРєС†РёРё <call>
 			case KEY_FUNCTION:{
-				if(itemData[IB_PLUGIN_ID] == -1){ // плагин не найден
+				if(itemData[IB_PLUGIN_ID] == -1){ // РїР»Р°РіРёРЅ РЅРµ РЅР°Р№РґРµРЅ
 					log_amx("[ERROR] plugin not found on line %d",line)
 					
 					itemData[IB_TYPE] = -1
@@ -306,7 +325,7 @@ public plugin_cfg(){
 				}else{
 					itemData[IB_FUNCTION_ID] = get_func_id(value,itemData[IB_PLUGIN_ID])
 					
-					if(itemData[IB_FUNCTION_ID] == -1){ // проверка на валидность функции
+					if(itemData[IB_FUNCTION_ID] == -1){ // РїСЂРѕРІРµСЂРєР° РЅР° РІР°Р»РёРґРЅРѕСЃС‚СЊ С„СѓРЅРєС†РёРё
 						log_amx("[ERROR] can't find function ^"%s^" on line %d",value,line)
 						
 						itemData[IB_TYPE] = -1
@@ -314,22 +333,22 @@ public plugin_cfg(){
 					}
 				}
 			}
-			// кол-во очков для этого бонуса в меню
+			// РєРѕР»-РІРѕ РѕС‡РєРѕРІ РґР»СЏ СЌС‚РѕРіРѕ Р±РѕРЅСѓСЃР° РІ РјРµРЅСЋ
 			case KEY_POINTS: itemData[IB_POINTS] = str_to_num(value)
-			// сумирование шанса за все уровни
+			// СЃСѓРјРёСЂРѕРІР°РЅРёРµ С€Р°РЅСЃР° Р·Р° РІСЃРµ СѓСЂРѕРІРЅРё
 			case KEY_SUMLEVELS: itemData[IB_SUMCHANCE] = str_to_num(value) ? false : true
 			
 			//
-			// Меню
+			// РњРµРЅСЋ
 			//
 			
-			// название меню
+			// РЅР°Р·РІР°РЅРёРµ РјРµРЅСЋ
 			case KEY_MENU_TITLE: copy(menuData[MENU_TITLE],charsmax(menuData[MENU_TITLE]),value)
-			// команда в чат для вызова меню
+			// РєРѕРјР°РЅРґР° РІ С‡Р°С‚ РґР»СЏ РІС‹Р·РѕРІР° РјРµРЅСЋ
 			case KEY_MENU_SAY: copy(menuData[MENU_SAYCMD],charsmax(menuData[MENU_SAYCMD]),value)
-			// команда в консоли для вызова этого меню
+			// РєРѕРјР°РЅРґР° РІ РєРѕРЅСЃРѕР»Рё РґР»СЏ РІС‹Р·РѕРІР° СЌС‚РѕРіРѕ РјРµРЅСЋ
 			case KEY_MENU_CONSOLE: copy(menuData[MENU_CONCMD],charsmax(menuData[MENU_CONCMD]),value)
-			// список предметов в меню
+			// СЃРїРёСЃРѕРє РїСЂРµРґРјРµС‚РѕРІ РІ РјРµРЅСЋ
 			case KEY_MENU_ITEMS: menuData[MENU_LIST] = _:parse_levels(value)
 			
 			case KEY_EXP: itemData[IB_EXP] = _:str_to_float(value)
@@ -339,7 +358,7 @@ public plugin_cfg(){
 		}
 	}
 	
-	switch(cfgBlock){	// разбираем последний предмет, если есть
+	switch(cfgBlock){	// СЂР°Р·Р±РёСЂР°РµРј РїРѕСЃР»РµРґРЅРёР№ РїСЂРµРґРјРµС‚, РµСЃР»Рё РµСЃС‚СЊ
 		case BONUS_ITEM_SPAWN,BONUS_ITEM_MENU: 
 			if(RegisterBonusItem(itemData,cfgBlock,line))
 				arrayset(itemData,0,itemFieldsStruct)
@@ -351,7 +370,7 @@ public plugin_cfg(){
 	
 	TrieDestroy(keyMap)
 	
-	// бонусы на спавне
+	// Р±РѕРЅСѓСЃС‹ РЅР° СЃРїР°РІРЅРµ
 	if(g_SpawnBonusItems)
 	{ 
 		g_SpawnBonusCount = ArraySize(g_SpawnBonusItems)
@@ -360,7 +379,7 @@ public plugin_cfg(){
 	if(g_PointsBonusItems){
 		g_PointsBonusCount = ArraySize(g_PointsBonusItems)
 		
-		// регистрация бонус менюшек
+		// СЂРµРіРёСЃС‚СЂР°С†РёСЏ Р±РѕРЅСѓСЃ РјРµРЅСЋС€РµРє
 		if(g_PointsBonusCount){
 			if(g_BonusMenus){
 				for(new i,length = ArraySize(g_BonusMenus) ; i < length ; i++){
@@ -389,22 +408,21 @@ public plugin_cfg(){
 							log_amx("WARNING ^"%s^" console command already in use on line %d!",menuData[MENU_CONCMD],line)
 					}
 				}
-			}else{	// дефолтное меню /anew
+			}else{	// РґРµС„РѕР»С‚РЅРѕРµ РјРµРЅСЋ /anew
 				register_clcmd("say /anew","Forward_CallCommand")
 				register_clcmd("anew","Forward_CallCommand")
 			}
 		}
 	}
 	
-	if(get_pcvar_num(cvar[CVAR_BONUS_SPAWN]) == 2){
-		if(cstrike_running()){
+	if(get_pcvar_num(cvar[CVAR_BONUS_SPAWN]) == 2)
+	{
+		if(cstrike_running())
+		{
 			register_logevent("ResetSpawn",2,"1=Round_End")
-			
 			register_logevent("RoundStart",2,"0=World triggered","1=Round_Start")
 			register_logevent("RoundRestart",2,"0=World triggered","1=Game_Commencing")
 			register_event("TextMsg","RoundRestart","a","2&#Game_will_restart_in")
-			
-			server_print("--> registred")
 		}
 	}
 }
@@ -418,7 +436,6 @@ public RoundStart()
 {
 	iRound ++
 }
-
 
 public Check_LockMap()
 {
@@ -438,14 +455,11 @@ public Check_LockMap()
 
 public client_disconnected(id)
 {
-	if(get_pcvar_num(cvar[CVAR_BONUS_SPAWN]) == 2)
-	{
-		player_already_spawned[id] = false
-	}
+	player_already_spawned[id] = false
 }
 
 //
-// Обработчик консольных команд
+// РћР±СЂР°Р±РѕС‚С‡РёРє РєРѕРЅСЃРѕР»СЊРЅС‹С… РєРѕРјР°РЅРґ
 //
 public Forward_ConsoleCommand(id){
 	if(!g_BonusMenus)
@@ -456,7 +470,7 @@ public Forward_ConsoleCommand(id){
 	
 	new cmdId
 	
-	// проверяем что сообщение содержит команду и узнаем её ID
+	// РїСЂРѕРІРµСЂСЏРµРј С‡С‚Рѕ СЃРѕРѕР±С‰РµРЅРёРµ СЃРѕРґРµСЂР¶РёС‚ РєРѕРјР°РЅРґСѓ Рё СѓР·РЅР°РµРј РµС‘ ID
 	if(!TrieGetCell(g_MenuCommandsValid,consoleCmd,cmdId))
 		return PLUGIN_HANDLED
 		
@@ -466,7 +480,7 @@ public Forward_ConsoleCommand(id){
 }
 
 //
-// Обработчик say комманд
+// РћР±СЂР°Р±РѕС‚С‡РёРє say РєРѕРјРјР°РЅРґ
 //
 public Forward_CallCommand(id){
 	if(!g_BonusMenus)
@@ -492,10 +506,10 @@ public Forward_CallCommand(id){
 }
 
 //
-// Форматирование менюшек
+// Р¤РѕСЂРјР°С‚РёСЂРѕРІР°РЅРёРµ РјРµРЅСЋС€РµРє
 //
 public Format_BonusMenu(id,cmdId){
-	if(isLocked){	// проверка возможности использования бонусов на этой карте
+	if(isLocked){	// РїСЂРѕРІРµСЂРєР° РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ Р±РѕРЅСѓСЃРѕРІ РЅР° СЌС‚РѕР№ РєР°СЂС‚Рµ
 		client_print_color(id,0,"%L %L",id,"AES_TAG",id,"AES_ANEW_BLOCKED")
 		
 		return PLUGIN_CONTINUE
@@ -506,7 +520,7 @@ public Format_BonusMenu(id,cmdId){
 	new player_bonus_str[10]
 	num_to_str(player_bonus,player_bonus_str,charsmax(player_bonus_str))
 	
-	if(player_bonus <= 0){ // еще какая-то проверка
+	if(player_bonus <= 0){ // РµС‰Рµ РєР°РєР°СЏ-С‚Рѕ РїСЂРѕРІРµСЂРєР°
 		client_print_color(id,0,"%L %L",id,"AES_TAG",id,"AES_ANEW_NOT")
 		
 		return PLUGIN_CONTINUE
@@ -515,12 +529,12 @@ public Format_BonusMenu(id,cmdId){
 	new ret
 	ExecuteForward(iaNewForward,ret,id)
 	
-	if(ret == PLUGIN_HANDLED) // блок вызова в другом плагине
+	if(ret == PLUGIN_HANDLED) // Р±Р»РѕРє РІС‹Р·РѕРІР° РІ РґСЂСѓРіРѕРј РїР»Р°РіРёРЅРµ
 		return PLUGIN_HANDLED
 	
 	new m,itemData[itemFieldsStruct]
 	
-	if(cmdId == -1){ // строим дефолтное меню anew со списком всех предметов
+	if(cmdId == -1){ // СЃС‚СЂРѕРёРј РґРµС„РѕР»С‚РЅРѕРµ РјРµРЅСЋ anew СЃРѕ СЃРїРёСЃРєРѕРј РІСЃРµС… РїСЂРµРґРјРµС‚РѕРІ
 		formatex(itemName,charsmax(itemName),"%L %L",id,"AES_TAG_MENU",id,"AES_BONUS_MENU",player_bonus)
 		m = menu_create(itemName,"aNew_MenuHandler")
 		
@@ -547,7 +561,7 @@ public Format_BonusMenu(id,cmdId){
 		for(new i,length = ArraySize(menuData[MENU_LIST]) ; i < length ; i++){
 			itemIndex = ArrayGetCell(menuData[MENU_LIST],i) - 1
 			
-			if(!(0 <=itemIndex < g_PointsBonusCount)) // что ты мне подсунул, блеать
+			if(!(0 <=itemIndex < g_PointsBonusCount)) // С‡С‚Рѕ С‚С‹ РјРЅРµ РїРѕРґСЃСѓРЅСѓР», Р±Р»РµР°С‚СЊ
 				continue
 				
 			ArrayGetArray(g_PointsBonusItems,i,itemData)
@@ -569,7 +583,7 @@ public Format_BonusMenu(id,cmdId){
 }
 
 //
-// Хандлер итемов в меню
+// РҐР°РЅРґР»РµСЂ РёС‚РµРјРѕРІ РІ РјРµРЅСЋ
 //
 public Format_ItemsCallback(id,menu,item)
 {
@@ -579,81 +593,18 @@ public Format_ItemsCallback(id,menu,item)
 	new itemData[itemFieldsStruct]
 	ArrayGetArray(g_PointsBonusItems,str_to_num(info),itemData)
 	
-	// проверяем доступность по бонусам
-	if(itemData[IB_POINTS])
-	{
-		new player_bonus = aes_get_player_bonus(id)
-		
-		if(itemData[IB_POINTS] > player_bonus)
-		{
-			new tmpLang[128]
-			formatex(tmpLang,charsmax(tmpLang)," %L",id,"AES_ANEW_INFO1",itemData[IB_POINTS])
-			add(item_name,charsmax(item_name),tmpLang)
-			
-			menu_item_setname(menu,item,item_name)
-			
-			return ITEM_DISABLED
-		}
-	}
+	new limit_fields = Bonus_CheckLimits(id,itemData)
 	
-	// проверяем доступность по опыту
-	if(itemData[IB_EXP])
+	for(new i = 1; i <= 5 ; i++)
 	{
-		new Float:player_exp = aes_get_player_exp(id)
-	
-		if(itemData[IB_EXP] > player_exp)
+		if(limit_fields & (1<<i))
 		{
-			new tmpLang[128]
-			formatex(tmpLang,charsmax(tmpLang)," %L",id,"AES_ANEW_INFO2",itemData[IB_EXP])
+			new tmpLang[128],lang_key[16]
+			formatex(lang_key,charsmax(lang_key),"AES_ANEW_INFO%d",i)
+				
+			formatex(tmpLang,charsmax(tmpLang)," %L",id,lang_key,itemData[IB_POINTS + (i - 1)])
 			add(item_name,charsmax(item_name),tmpLang)
-			
-			menu_item_setname(menu,item,item_name)
-			
-			return ITEM_DISABLED
-		}
-	}
 	
-	// проверяем доступность по уровню
-	if(itemData[IB_LEVEL])
-	{
-		new player_level = aes_get_player_level(id) + 1
-	
-		if(itemData[IB_LEVEL] > player_level)
-		{
-			new tmpLang[128]
-			formatex(tmpLang,charsmax(tmpLang)," %L",id,"AES_ANEW_INFO3",itemData[IB_LEVEL])
-			add(item_name,charsmax(item_name),tmpLang)
-			
-			menu_item_setname(menu,item,item_name)
-			
-			return ITEM_DISABLED
-		}
-	}
-	
-	// проверяем доступность по раунду
-	if(itemData[IB_ROUND])
-	{
-		if(itemData[IB_ROUND] > iRound)
-		{
-			new tmpLang[128]
-			formatex(tmpLang,charsmax(tmpLang)," %L",id,"AES_ANEW_INFO4",itemData[IB_ROUND])
-			add(item_name,charsmax(item_name),tmpLang)
-			
-			menu_item_setname(menu,item,item_name)
-			
-			return ITEM_DISABLED
-		}
-	}
-
-	// проверяем на доступность по времени
-	if(itemData[IB_TIME])
-	{
-		if(itemData[IB_TIME] < (get_gametime() - player_spawn_time[id]))
-		{
-			new tmpLang[128]
-			formatex(tmpLang,charsmax(tmpLang)," %L",id,"AES_ANEW_INFO5",itemData[IB_TIME])
-			add(item_name,charsmax(item_name),tmpLang)
-			
 			menu_item_setname(menu,item,item_name)
 			
 			return ITEM_DISABLED
@@ -661,6 +612,67 @@ public Format_ItemsCallback(id,menu,item)
 	}
 	
 	return ITEM_ENABLED
+}
+
+//
+// РџСЂРѕРІРµСЂСЏРµРј РѕРіСЂР°РЅРёС‡РµРЅРёСЏ РЅР° Р±РѕРЅСѓСЃС‹
+//
+Bonus_CheckLimits(id,itemData[itemFieldsStruct])
+{
+	new limit_fields = 0
+	
+	// РїСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚СѓРїРЅРѕСЃС‚СЊ РїРѕ Р±РѕРЅСѓСЃР°Рј
+	if(itemData[IB_POINTS])
+	{
+		new player_bonus = aes_get_player_bonus(id)
+		
+		if(itemData[IB_POINTS] > player_bonus)
+		{
+			limit_fields |= LIMIT_POINTS
+		}
+	}
+	
+	// РїСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚СѓРїРЅРѕСЃС‚СЊ РїРѕ РѕР±С‹С‚Сѓ
+	if(itemData[IB_EXP])
+	{
+		new Float:player_exp = aes_get_player_exp(id)
+	
+		if(itemData[IB_EXP] > player_exp)
+		{
+			limit_fields |= LIMIT_EXP
+		}
+	}
+	
+	// РїСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚СѓРїРЅРѕСЃС‚СЊ РїРѕ СѓСЂРѕРІРЅСЋ
+	if(itemData[IB_LEVEL])
+	{
+		new player_level = aes_get_player_level(id) + 1
+	
+		if(itemData[IB_LEVEL] > player_level)
+		{
+			limit_fields |= LIMIT_LEVEL
+		}
+	}
+	
+	// РїСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚СѓРїРЅРѕСЃС‚СЊ РїРѕ СЂР°СѓРЅРґСѓ
+	if(itemData[IB_ROUND])
+	{
+		if(itemData[IB_ROUND] > iRound)
+		{
+			limit_fields |= LIMIT_ROUND
+		}
+	}
+	
+	// РїСЂРѕРІРµСЂСЏРµРј РЅР° РґРѕСЃС‚СѓРїРЅРѕСЃС‚СЊ РїРѕ РІСЂРµРјРµРЅРё
+	if(itemData[IB_TIME])
+	{
+		if(itemData[IB_TIME] < (get_gametime() - player_spawn_time[id]))
+		{
+			limit_fields |= LIMIT_TIME
+		}
+	}
+	
+	return limit_fields
 }
 
 public F_Format_NavButtons(id,menu){
@@ -677,7 +689,7 @@ public F_Format_NavButtons(id,menu){
 }
 
 //
-// Хандлер бонус меню
+// РҐР°РЅРґР»РµСЂ Р±РѕРЅСѓСЃ РјРµРЅСЋ
 //
 public aNew_MenuHandler(id,m,item){
 	if(item == MENU_EXIT)
@@ -692,13 +704,6 @@ public aNew_MenuHandler(id,m,item){
 		return PLUGIN_HANDLED
 	}
 	
-	new player_bonus = aes_get_player_bonus(id)
-	
-	if(!player_bonus){ // какая-то проверка
-		menu_destroy(m)
-		return PLUGIN_HANDLED
-	}
-	
 	menu_item_getinfo(m,item,itemName[0],itemInfo,charsmax(itemInfo),itemName,1,itemName[0])
 	new itemKey = str_to_num(itemInfo)
 	
@@ -707,12 +712,8 @@ public aNew_MenuHandler(id,m,item){
 	new itemData[itemFieldsStruct]
 	ArrayGetArray(g_PointsBonusItems,itemKey,itemData)
 	
-	if(player_bonus < itemData[IB_POINTS]){ // недостаточно бонус очков
-		client_print_color(id,print_team_default,"%L %L",id,"AES_TAG",id,"AES_ANEW_NOTENG")
-		return PLUGIN_HANDLED
-	}
-	
-	if(GiveBonus(itemData,id)){
+	if(GiveBonus(itemData,id))
+	{
 		aes_add_player_bonus_f(id,-itemData[IB_POINTS])
 		
 		aes_get_item_name(itemData[IB_NAME],itemName,charsmax(itemName),id)
@@ -725,37 +726,42 @@ public aNew_MenuHandler(id,m,item){
 }
 
 //
-// Назначение бонус предметов
-//	itemData- данные бонуса
-//	id - игрок
-//	count - кол-во бонусов
-//	psh - пшш парень, значение в функцию передать не хочешь?
+// РќР°Р·РЅР°С‡РµРЅРёРµ Р±РѕРЅСѓСЃ РїСЂРµРґРјРµС‚РѕРІ
+//	itemData- РґР°РЅРЅС‹Рµ Р±РѕРЅСѓСЃР°
+//	id - РёРіСЂРѕРє
+//	count - РєРѕР»-РІРѕ Р±РѕРЅСѓСЃРѕРІ
+//	psh - РїС€С€ РїР°СЂРµРЅСЊ, Р·РЅР°С‡РµРЅРёРµ РІ С„СѓРЅРєС†РёСЋ РїРµСЂРµРґР°С‚СЊ РЅРµ С…РѕС‡РµС€СЊ?
 //
 GiveBonus(itemData[itemFieldsStruct],id,count = 1,psh = 0){
-	switch(itemData[IB_TYPE]){
-		case ITEM_GIVE:{
-			
-			server_print("--> ALLLO")
-			
-			for(new i ; i < count ; i++){
-				if(!give_item(id,itemData[IB_ITEM])){
+	switch(itemData[IB_TYPE])
+	{
+		case ITEM_GIVE:
+		{
+			for(new i ; i < count ; i++)
+			{
+				if(!give_item(id,itemData[IB_ITEM]))
+				{
 					client_print_color(id,print_team_default,"%L %L",id,"AES_TAG",id,"AES_ANEW_CALL_PROBLEM")
 					return false
 				}
 			}
 		}
-		case ITEM_CALL:{
-			server_print("--> ALLLO2")
-			
-			if(callfunc_begin_i(itemData[IB_FUNCTION_ID],itemData[IB_PLUGIN_ID])){
+		case ITEM_CALL:
+		{
+			if(callfunc_begin_i(itemData[IB_FUNCTION_ID],itemData[IB_PLUGIN_ID]))
+			{
 				callfunc_push_int(id)
 				callfunc_push_int(count)
 					
 				if(psh)
+				{
 					callfunc_push_int(psh)
-					
+				}
+				
 				return callfunc_end()
-			}else{
+			}
+			else
+			{
 				client_print_color(id,print_team_default,"%L %L",id,"AES_TAG",id,"AES_ANEW_CALL_PROBLEM")
 				return false
 			}
@@ -766,9 +772,10 @@ GiveBonus(itemData[itemFieldsStruct],id,count = 1,psh = 0){
 }
 
 //
-// Очищение строки от символов меню
+// РћС‡РёС‰РµРЅРёРµ СЃС‚СЂРѕРєРё РѕС‚ СЃРёРјРІРѕР»РѕРІ РјРµРЅСЋ
 //
-strip_menu_codes(itemName[],len){
+strip_menu_codes(itemName[],len)
+{
 	replace_all(itemName,len,"\r","")
 	replace_all(itemName,len,"\y","")
 	replace_all(itemName,len,"\R","")
@@ -776,11 +783,19 @@ strip_menu_codes(itemName[],len){
 }
 
 //
-// Выдача бонусов на спавнеы
+// Р’С‹РґР°С‡Р° Р±РѕРЅСѓСЃРѕРІ РЅР° СЃРїР°РІРЅРµС‹
 //
-public On_Player_Spawn(id){
+public On_Player_Spawn(id)
+{
+	Bonus_OnSpawn(id)
+		
+	return HAM_IGNORED
+}
+
+public Bonus_OnSpawn(id)
+{
 	if(isLocked || !get_pcvar_num(cvar[CVAR_BONUS_ENABLED]) || !is_user_alive(id))
-		return HAM_IGNORED
+		return false
 	
 	player_spawn_time[id] = get_gametime()
 		
@@ -789,9 +804,9 @@ public On_Player_Spawn(id){
 	switch(get_pcvar_num(cvar[CVAR_BONUS_SPAWN]))
 	{
 		case 0: return HAM_IGNORED
-		case 2: // запоминаем спавн игрока
+		case 2: // Р·Р°РїРѕРјРёРЅР°РµРј СЃРїР°РІРЅ РёРіСЂРѕРєР°
 		{ 
-			// игрок уже заспавнился
+			// РёРіСЂРѕРє СѓР¶Рµ Р·Р°СЃРїР°РІРЅРёР»СЃСЏ
 			if(player_already_spawned[id])
 			{
 				return HAM_IGNORED
@@ -803,14 +818,23 @@ public On_Player_Spawn(id){
 	
 	new itemData[itemFieldsStruct],actLevel = -1
 	new levelValue
+	
+	new Array:assigned_bonuses
 		
-	// проверяем бонусы на спавне
-	for(new i;i < g_SpawnBonusCount ; ++i){
+	// РїСЂРѕРІРµСЂСЏРµРј Р±РѕРЅСѓСЃС‹ РЅР° СЃРїР°РІРЅРµ
+	for(new i;i < g_SpawnBonusCount ; ++i)
+	{
 		arrayset(itemData,0,itemFieldsStruct)
 		ArrayGetArray(g_SpawnBonusItems,i,itemData)
 		
-		// считаем шанс выдачи бонуса
-		if(itemData[IB_CHANCE]){
+		if(Bonus_CheckLimits(id,itemData))
+		{
+			continue
+		}
+		
+		// СЃС‡РёС‚Р°РµРј С€Р°РЅСЃ РІС‹РґР°С‡Рё Р±РѕРЅСѓСЃР°
+		if(itemData[IB_CHANCE])
+		{
 			new chanceValue
 			
 			if(player_level >= ArraySize(itemData[IB_CHANCE])) // :D
@@ -819,7 +843,7 @@ public On_Player_Spawn(id){
 				actLevel = player_level
 			
 			if(itemData[IB_SUMCHANCE]){
-				for(new z ; z <= actLevel ; z++)	// складываем общий шанс за все уровни
+				for(new z ; z <= actLevel ; z++)	// СЃРєР»Р°РґС‹РІР°РµРј РѕР±С‰РёР№ С€Р°РЅСЃ Р·Р° РІСЃРµ СѓСЂРѕРІРЅРё
 					chanceValue += ArrayGetCell(itemData[IB_CHANCE],i)
 			}else{
 				if(actLevel < 0)
@@ -827,34 +851,79 @@ public On_Player_Spawn(id){
 			
 				chanceValue = ArrayGetCell(itemData[IB_CHANCE],actLevel)
 			}
-			// проверяем что это наш шанс
+			// РїСЂРѕРІРµСЂСЏРµРј С‡С‚Рѕ СЌС‚Рѕ РЅР°С€ С€Р°РЅСЃ
 			if(chanceValue * 10 < random_num(0,1000))
-				continue	// извини братюнь, в другой раз
+			{
+				continue	// РёР·РІРёРЅРё Р±СЂР°С‚СЋРЅСЊ, РІ РґСЂСѓРіРѕР№ СЂР°Р·
+			}
 		}
 		
-		// узнаем значение бонуса для определенного уровня
-		if(itemData[IB_LEVELS]){
+		// СѓР·РЅР°РµРј Р·РЅР°С‡РµРЅРёРµ Р±РѕРЅСѓСЃР° РґР»СЏ РѕРїСЂРµРґРµР»РµРЅРЅРѕРіРѕ СѓСЂРѕРІРЅСЏ
+		if(itemData[IB_LEVELS])
+		{
 			if(player_level >= ArraySize(itemData[IB_LEVELS])) // :D
 				actLevel = ArraySize(itemData[IB_LEVELS]) - 1
 			else
 				actLevel = player_level
 			
-			if(itemData[IB_SUMCHANCE]){
-				for(new i ; i <= actLevel ; i++)	// складываем значения за все уровни
+			if(itemData[IB_SUMCHANCE])
+			{
+				for(new i ; i <= actLevel ; i++)	// СЃРєР»Р°РґС‹РІР°РµРј Р·РЅР°С‡РµРЅРёСЏ Р·Р° РІСЃРµ СѓСЂРѕРІРЅРё
 					levelValue += ArrayGetCell(itemData[IB_LEVELS],i)
-			}else{
+			}
+			else
+			{
 				if(actLevel < 0)
+				{
 					continue
+				}
 				
 				levelValue = ArrayGetCell(itemData[IB_LEVELS],actLevel)
 			}
 		}
 		
-		if(levelValue > 0)	// выдаем бонус
-			GiveBonus(itemData,id,levelValue)
+		if(levelValue > 0)
+		{
+			// РІС‹РґР°РµРј Р±РѕРЅСѓСЃ
+			if(GiveBonus(itemData,id,levelValue))
+			{
+				if(!assigned_bonuses)
+				{
+					assigned_bonuses = ArrayCreate(sizeof itemData[IB_NAME])
+				}
+				
+				ArrayPushString(assigned_bonuses,itemData[IB_NAME])
+			}
+		}
 	}
+	
+	if(assigned_bonuses)
+	{
+		new bonus_info[192],len
 		
-	return HAM_IGNORED
+		len = formatex(bonus_info,charsmax(bonus_info),"%L %L ",id,"AES_TAG",
+			id,"AES_ANEW_INFO6")
+			
+		for(new i,length = ArraySize(assigned_bonuses) ; i < length ; i++)
+		{
+			ArrayGetString(assigned_bonuses,i,itemData[IB_NAME],charsmax(itemData[IB_NAME]))
+			
+			if(i > 0)
+			{
+				len += formatex(bonus_info[len],charsmax(bonus_info) - len,", ")
+			}
+			
+			len += formatex(bonus_info[len],charsmax(bonus_info) - len,"^4")
+			len += aes_get_item_name(itemData[IB_NAME],bonus_info[len],charsmax(bonus_info) - len,id)
+			len += formatex(bonus_info[len],charsmax(bonus_info) - len,"^1")
+		}
+		
+		ArrayDestroy(assigned_bonuses)
+		
+		client_print_color(id,print_team_default,bonus_info)
+	}
+	
+	return true
 }
 
 public Array:parse_levels(levelString[]){
@@ -875,14 +944,18 @@ public Array:parse_levels(levelString[]){
 	return which
 }
 
-public aes_get_item_name(itemString[],out[],len,id){
+public aes_get_item_name(itemString[],out[],len,id)
+{
 	new l
 	
-	if(strfind(itemString,"LANG_") == 0){ // формирование по словарю
+	if(strfind(itemString,"LANG_") == 0)// С„РѕСЂРјРёСЂРѕРІР°РЅРёРµ РїРѕ СЃР»РѕРІР°СЂСЋ
+	{ 
 		replace(itemString,strlen(itemString),"LANG_","")
 		
 		l = formatex(out,len,"%L",id,itemString)
-	}else{
+	}
+	else
+	{
 		l = copy(out,len,itemString)
 	}
 	
@@ -890,16 +963,16 @@ public aes_get_item_name(itemString[],out[],len,id){
 }
 
 //
-// Регистрация бонус предмета
-//	itemData - данные
-//	cfgBlock - конфигурационный блок
-//	line - линия
+// Р РµРіРёСЃС‚СЂР°С†РёСЏ Р±РѕРЅСѓСЃ РїСЂРµРґРјРµС‚Р°
+//	itemData - РґР°РЅРЅС‹Рµ
+//	cfgBlock - РєРѕРЅС„РёРіСѓСЂР°С†РёРѕРЅРЅС‹Р№ Р±Р»РѕРє
+//	line - Р»РёРЅРёСЏ
 //
 public RegisterBonusItem(itemData[itemFieldsStruct],cfgBlock,line){
-	if(itemData[IB_TYPE]){	// записываем параметры предедущего бонуса
+	if(itemData[IB_TYPE]){	// Р·Р°РїРёСЃС‹РІР°РµРј РїР°СЂР°РјРµС‚СЂС‹ РїСЂРµРґРµРґСѓС‰РµРіРѕ Р±РѕРЅСѓСЃР°
 		new bool:isOk = true
 				
-		// проверки на валидность
+		// РїСЂРѕРІРµСЂРєРё РЅР° РІР°Р»РёРґРЅРѕСЃС‚СЊ
 		switch(itemData[IB_TYPE]){
 			case ITEM_GIVE:{
 				if(!itemData[IB_ITEM][0]){
@@ -954,76 +1027,3 @@ public ResetSpawn()
 	arrayset(player_already_spawned,false,sizeof player_already_spawned)
 	arrayset(_:player_spawn_time,0,sizeof player_spawn_time)
 }
-/*
-//
-// API
-//
-public plugin_natives(){
-	register_library("aexperience")
-	
-	register_native("aes_bonus_resetspawn","ResetSpawn",true)
-	
-	register_native("aes_bonus_registermenu","_native_register_menu")
-	register_native("aes_bonus_registeritem","_native_register_item")
-	
-}
-
-//
-// Регистрация нового меню
-//	title[] - заголовок нового меню
-//	say[] - команда в чат для вызова этого меню
-//	console[] - команда в консоли для вызова этого меню
-//
-//	@return	- ID нового меню, или -1 если всё плохо
-//
-// native aes_bonus_registermenu(title[],say[] = "",console[] = "")
-//
-public _native_register_menu(plugin,params){
-	new menuData[menuFieldsStruct]
-	get_string(1,menuData[MENU_TITLE],charsmax(menuData[MENU_TITLE]))
-	
-	if(!menuData[MENU_TITLE][0]){
-		log_error(AMX_ERR_NATIVE,"menu title not specifed")
-		return -1
-	}
-	
-	new sayCommand[64],consoleCommand[64]
-	get_string(2,menuData[MENU_SAYCMD],charsmax(menuData[MENU_SAYCMD]))
-	get_string(3,menuData[MENU_CONCMD],charsmax(menuData[MENU_CONCMD]))
-	
-	return RegisterMenuItem(menuData,plugin)
-}
-
-//
-// Регистрация нового бонуса
-//	name[] - название бонуса
-//	style - вызов бонуса
-//		ITEM_GIVE - выдача предмета
-//		ITEM_CALL - вызов функции из плагина
-//		ITEM_FORWARD - регистрация форварда 
-//
-//	ITEM_GIVE
-//		item[] - предмет, который будет выдан игроку
-//	ITEM_CALL
-//		plugin[] - плагин
-//		function[] - функция в плагине
-//	ITEM_FORWARD
-//		forward[] - форвард функция
-//
-//	type - тип бонуса
-//		BONUS_SPAWN - бонус на спавне
-//		BONUS_ITEM - бонус в меню
-//
-//	BONUS_SPAWN
-//		levels[] - значения уровня
-//		chance[] - шанс
-//		bool:sumchance - суммировать значения
-//
-//	BONUS_ITEM
-//		cost - стоимость предмета в меню
-//
-//	@return - ID нового предмета, или -1 если всё тлён
-//
-// native aes_bonus_registeritem(name[],style,any:...)
-//
-*/

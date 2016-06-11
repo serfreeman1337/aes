@@ -22,9 +22,11 @@
 	
 	#define MAX_NAME_LENGTH 32
 	#define MAX_PLAYERS 32
+	
+	#define client_disconnected client_disconnect
 #endif
 
-#include <aes_main>
+#include <aes_v>
 
 #define PLUGIN "AES: Informer"
 #define VERSION "0.5 Vega"

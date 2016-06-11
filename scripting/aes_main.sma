@@ -10,13 +10,19 @@
 #define PLUGIN "Advanced Experience System"
 #define VERSION "0.5 Vega"
 #define AUTHOR "serfreeman1337"
-#define LASTUPDATE "31, May (05), 2016"
+#define LASTUPDATE "11, June (06), 2016"
 
 #if AMXX_VERSION_NUM < 183
 	#include <colorchat>
 	
+	#define print_team_default DontChange
+	#define print_team_grey Grey
+	#define print_team_red Red
+	#define print_team_blue Blue
+	
 	#define MAX_NAME_LENGTH	32
 	#define MAX_PLAYERS	32
+	
 	#define client_disconnected client_disconnect
 	
 	new MaxClients
@@ -47,10 +53,10 @@ enum _:load_state_type	// состояние получение статисти
 {
 	LOAD_NO,	// данных нет
 	LOAD_WAIT,	// ожидание данных
-	LOAD_OK,	// есть данные
 	LOAD_NEW,	// новая запись
 	LOAD_NEWWAIT,	// новая запись, ждем ответа
-	LOAD_UPDATE	// перезагрузить после обновления
+	LOAD_UPDATE,	// перезагрузить после обновления
+	LOAD_OK		// есть данные
 }
 
 enum _:cvars
@@ -152,6 +158,7 @@ new dummy
 
 new flush_que[QUERY_LENGTH * 3],flush_que_len
 new const task_flush		=	11337
+new bool:is_by_stats		=	false
 
 public plugin_init()
 {
@@ -195,6 +202,9 @@ public plugin_init()
 
 #pragma unused max_exp
 
+//
+// загрузка конфигурации
+//
 public plugin_cfg()
 {
 	new cfg_path[256]
@@ -202,6 +212,56 @@ public plugin_cfg()
 	
 	server_cmd("exec %s/aes/aes.cfg",cfg_path)
 	server_exec()
+	
+	// парсим уровни
+	new levels_string[512],level_str[10]
+	get_pcvar_string(cvar[CVAR_LEVELS],levels_string,charsmax(levels_string))
+	levels_list = ArrayCreate(1)
+	
+	#if AMXX_VERSION_NUM < 183
+	if(levels_string[0])
+	{
+		new e_pos,s_pos
+		
+		do {
+			e_pos = strfind(levels_string[s_pos]," ")
+			
+			formatex(level_str,e_pos,levels_string[s_pos])
+			
+			if(!levels_list)
+			{
+				levels_list = ArrayCreate(1)
+			}
+			
+			ArrayPushCell(levels_list,floatstr(level_str))
+			max_exp = floatstr(level_str)
+			
+			s_pos += e_pos + 1
+		} while (e_pos != -1)
+	}
+	#else
+	while((argbreak(levels_string,level_str,charsmax(level_str),levels_string,charsmax(levels_string))) != -1)
+	{
+		if(!levels_list)
+		{
+			levels_list = ArrayCreate(1)
+		}
+		
+		ArrayPushCell(levels_list,floatstr(level_str))
+		max_exp = floatstr(level_str)
+	}
+	#endif
+	
+	if(levels_list)
+		levels_count = ArraySize(levels_list)
+	
+	// AES работает в режиме статистики по csx
+	// выключаем работу с БД
+	if(get_pcvar_num(cvar[CVAR_RANK]) == -1)
+	{
+		is_by_stats = true
+		return PLUGIN_CONTINUE
+	}
 	
 	new db_type[12]
 	get_pcvar_string(cvar[CVAR_SQL_TYPE],db_type,charsmax(db_type))
@@ -288,47 +348,7 @@ public plugin_cfg()
 		SQL_ThreadQuery(sql,"SQL_Handler",query,sql_data,sizeof sql_data)
 	}
 	
-	
-	new levels_string[512],level_str[10]
-	get_pcvar_string(cvar[CVAR_LEVELS],levels_string,charsmax(levels_string))
-	levels_list = ArrayCreate(1)
-	
-	#if AMXX_VERSION_NUM < 183
-	if(levels_string[0])
-	{
-		new e_pos,s_pos
-		
-		do {
-			e_pos = strfind(levels_string[s_pos]," ")
-			
-			formatex(level_str,e_pos,levels_string[s_pos])
-			
-			if(!levels_list)
-			{
-				levels_list = ArrayCreate(1)
-			}
-			
-			ArrayPushCell(levels_list,floatstr(level_str))
-			max_exp = floatstr(level_str)
-			
-			s_pos += e_pos + 1
-		} while (e_pos != -1)
-	}
-	#else
-	while((argbreak(levels_string,level_str,charsmax(level_str),levels_string,charsmax(levels_string))) != -1)
-	{
-		if(!levels_list)
-		{
-			levels_list = ArrayCreate(1)
-		}
-		
-		ArrayPushCell(levels_list,floatstr(level_str))
-		max_exp = floatstr(level_str)
-	}
-	#endif
-	
-	if(levels_list)
-		levels_count = ArraySize(levels_list)
+	return PLUGIN_CONTINUE
 }
 
 public plugin_end()
@@ -341,6 +361,13 @@ public plugin_end()
 //
 public ImportFromFile()
 {
+	if(sql == Empty_Handle)
+	{
+		log_amx("db is diabled")
+		
+		return false
+	}
+	
 	new fPath[256],len
 	len = get_datadir(fPath,charsmax(fPath))
 		
@@ -473,74 +500,6 @@ public ImportFromFile()
 	return true
 }
 
-public t1(id)
-{
-	DB_SavePlayerData(id)
-}
-
-public t2(id)
-{
-	Player_SetExp(id,player_data[id][PLAYER_EXP] + 0.01)
-}
-
-public t3(id)
-{
-	Player_SetExp(id,player_data[id][PLAYER_EXP] + 1.0)
-}
-
-public t4(id)
-{
-	player_data[id][PLAYER_EXP] -= 0.01
-}
-
-public t5(id)
-{
-	player_data[id][PLAYER_EXP] -= 1.01
-}
-
-public t6(id)
-{
-	Player_SetExp(id,1337.0)
-}
-
-public t7(id)
-{
-	new players[32],pnum
-	get_players(players,pnum)
-	
-	log_amx("-> DO IT!")
-	
-	for(new i ; i < pnum ; i++)
-	{
-		new random_bonus = random_num(0,1337)
-		new Float:random_exp = random_float(0.0,1337.0)
-		
-		Player_SetExp(players[i],
-			random_exp,
-			false,
-			true
-		)
-		
-		Player_SetBonus(players[i],
-			random_bonus,
-			true
-		)
-		
-		new name[32]
-		get_user_name(players[i],name,charsmax(name))
-		
-		log_amx("--> %s FOR %.2f %d",
-			name,
-			random_exp,
-			random_bonus
-		)
-		
-		
-		
-		DB_SavePlayerData(players[i])
-	}
-}
-
 //
 // Загружаем статистику из БД при подключении игрока
 //
@@ -635,12 +594,6 @@ Player_SetExp(id,Float:new_exp,bool:no_forward = false,bool:force = false)
 		}
 	}
 	
-	log_amx("SET PLAYER LEVEL %.2f %d %.2f <--",
-		player_data[id][PLAYER_EXP],
-		player_data[id][PLAYER_LEVEL],
-		player_data[id][PLAYER_EXP_TO_NEXT]
-	)
-	
 	return rt
 }
 
@@ -649,10 +602,6 @@ Player_SetExp(id,Float:new_exp,bool:no_forward = false,bool:force = false)
 //
 Player_SetBonus(id,bonus,bool:force = false)
 {	
-	server_print("-->  SET BONUS %d for %d",
-		bonus,id
-	)
-	
 	// статистика на паузе
 	if(get_pcvar_num(cvar[CVAR_PAUSE]) && !force)
 	{
@@ -742,6 +691,11 @@ Float:Level_GetExp(level)
 //
 DB_LoadPlayerData(id)
 {
+	if(sql == Empty_Handle)
+	{
+		return false
+	}
+	
 	// проблемы с соединением
 	if(gg_sql)
 	{
@@ -814,13 +768,18 @@ DB_LoadPlayerData(id)
 //
 DB_SavePlayerData(id,bool:reload = false)
 {
+	if(sql == Empty_Handle)
+	{
+		return false
+	}
+	
 	// проблемы с соединением
 	if(gg_sql)
 	{
 		return false
 	}
 	
-	if(player_data[id][PLAYER_LOADSTATE] < LOAD_OK) // игрок не загрузился
+	if(player_data[id][PLAYER_LOADSTATE] < LOAD_OK && player_data[id][PLAYER_LOADSTATE] != LOAD_NEW) // игрок не загрузился
 	{
 		return false
 	}
@@ -860,8 +819,6 @@ DB_SavePlayerData(id,bool:reload = false)
 				
 				to_save ++
 			}
-			
-			server_print("--> DIFF BONUS %d",diffbonus)
 			
 			if(diffbonus != 0)
 			{
@@ -952,11 +909,6 @@ DB_SavePlayerData(id,bool:reload = false)
 			{
 				// запросов достаточно, сбрасываем их
 				DB_AddQuery(query,len)
-				
-				server_print("--> ADD QUERY ^"%s^"",
-					query
-				)
-				
 				return true
 			}
 		}
@@ -991,6 +943,11 @@ DB_AddQuery(query[],len)
 //
 public DB_FlushQuery()
 {
+	if(sql == Empty_Handle)
+	{
+		return false
+	}
+	
 	if(gg_sql)
 	{
 		return false
@@ -1000,8 +957,6 @@ public DB_FlushQuery()
 	{
 		new sql_data[1] = SQL_UPDATE
 		SQL_ThreadQuery(sql,"SQL_Handler",flush_que,sql_data,sizeof sql_data)
-		
-		log_amx("FLUSH %d",flush_que_len)
 		
 		flush_que_len = 0
 	}
@@ -1056,7 +1011,7 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 		case SQL_LOAD: // загрзука статистики игрока
 		{
 			new id = data[1]
-		
+			
 			if(!is_user_connected(id))
 			{
 				return PLUGIN_HANDLED
@@ -1070,25 +1025,16 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 				new Float:exp
 				
 				SQL_ReadResult(sqlQue,ROW_EXP,exp)
-				Player_SetExp(id,exp,true)
+				Player_SetExp(id,exp,true,true)
 				
 				player_data[id][PLAYER_EXPLAST] = _:player_data[id][PLAYER_EXP]
-				
-				player_data[id][PLAYER_BONUS] = player_data[id][PLAYER_BONUSLAST] = SQL_ReadResult(sqlQue,ROW_BONUS)
-				
-				log_amx("SELECT id: %d, exp: %.2f, bonus: %d",
-					SQL_ReadResult(sqlQue,ROW_ID),
-					player_data[id][PLAYER_EXPLAST],
-					player_data[id][PLAYER_BONUS]
-				)
+				player_data[id][PLAYER_BONUS] = player_data[id][PLAYER_BONUSLAST] = SQL_ReadResult(sqlQue,ROW_BONUS)	
 			}
 			else // помечаем как нового игрока
 			{
 				player_data[id][PLAYER_LOADSTATE] = LOAD_NEW
 				
 				DB_SavePlayerData(id) // добавляем запись в базу данных
-				
-				log_amx("SELECT NEW")
 			}
 		}
 		case SQL_INSERT:	// запись новых данных
@@ -1108,13 +1054,12 @@ public SQL_Handler(failstate,Handle:sqlQue,err[],errNum,data[],dataSize){
 				player_data[id][PLAYER_ID] = SQL_GetInsertId(sqlQue)	// первичный ключ
 				player_data[id][PLAYER_LOADSTATE] = LOAD_OK		// данные загружены
 				
-				// я упрлся 0)0)0
+				Player_SetExp(id,player_data[id][PLAYER_EXP],true,true)
 				
-				log_amx("INSERT id: %d, exp: %.2f, bonus: %d",
-					player_data[id][PLAYER_ID],
-					player_data[id][PLAYER_EXPLAST],
-					player_data[id][PLAYER_BONUSLAST]
-				)
+				player_data[id][PLAYER_EXPLAST] = _:player_data[id][PLAYER_EXP]
+				player_data[id][PLAYER_BONUS] = player_data[id][PLAYER_BONUSLAST] = 0
+				
+				// я упрлся 0)0)0
 			}
 		}
 		case SQL_UPDATE: // обновление данных
@@ -1244,6 +1189,11 @@ public plugin_natives()
 
 public _aes_find_stats_thread(plugin_id,params)
 {
+	if(sql == Empty_Handle)
+	{
+		return false
+	}
+	
 	if(gg_sql)
 	{
 		return false
@@ -1359,6 +1309,12 @@ public _aes_find_stats_thread(plugin_id,params)
 public _aes_set_player_exp(id,Float:exp,bool:no_forward,bool:force)
 {
 	CHECK_PLAYER(id)
+	
+	if(is_by_stats)
+	{
+		player_data[id][PLAYER_LOADSTATE] = LOAD_OK
+	}
+	
 	return Player_SetExp(id,exp,no_forward,force)
 }
 
@@ -1486,7 +1442,8 @@ public _aes_get_player_stats(plugin,params){
 }
 
 public _aes_set_player_stats(plugin,params){
-	if(params < 2){
+	if(params < 2)
+	{
 		log_error(AMX_ERR_NATIVE,"bad arguments num, expected 2, passed %d", params)
 		
 		return 0
