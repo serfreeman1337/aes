@@ -24,7 +24,7 @@
 
 #include <aes_main>
 
-#define PLUGIN "AES: Cstrike Addon"
+#define PLUGIN "AES: CStrike Addon"
 #define VERSION "0.5 Vega"
 #define AUTHOR "serfreeman1337"
 
@@ -199,13 +199,21 @@ public client_disconnected(id)
 		arrayset(g_Players[id],0,STREAK_OPT)
 
 public client_death(killer,victim,wpn,hit,TK){
-	if(!(killer < 0 <= MaxClients)|| killer == victim)
+	if(!(0 < killer <= MaxClients)|| killer == victim)
 		return
 	
 	if(TK && !get_pcvar_num(cvar[CVAR_XP_FFA]))
 		return
-
-	aes_add_player_exp_f(killer,hit != HIT_HEAD ? get_pcvar_float(cvar[CVAR_XP_KILL]) : get_pcvar_float(cvar[CVAR_XP_HS]))
+		
+	if(hit != HIT_HEAD)
+	{
+		aes_add_player_exp_f(killer,get_pcvar_float(cvar[CVAR_XP_KILL]))
+	}
+	else
+	{
+		aes_add_player_exp_f(killer,get_pcvar_float(cvar[CVAR_XP_HS]))
+	}
+	
 	aes_add_player_exp_f(victim,get_pcvar_float(cvar[CVAR_XP_DEATH]))
 	
 	// игрок убил VIP
