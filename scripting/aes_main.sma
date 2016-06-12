@@ -198,6 +198,8 @@ public plugin_init()
 	#if AMXX_VERSION_NUM < 183
 		MaxClients = get_maxplayers()
 	#endif
+	
+	register_cvar("aes", VERSION, FCVAR_SERVER | FCVAR_SPONLY | FCVAR_UNLOGGED)
 }
 
 #pragma unused max_exp
