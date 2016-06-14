@@ -83,7 +83,7 @@ new frArrSize,hsArrSize,kfArrSize,heArrSize
 new bool:isAsMap
 new bool:is_by_stats
 
-new g_Players[MAX_PLAYERS][STREAK_OPT]
+new g_Players[MAX_PLAYERS + 1][STREAK_OPT]
 
 public plugin_init(){
 	register_plugin(PLUGIN, VERSION, AUTHOR)
