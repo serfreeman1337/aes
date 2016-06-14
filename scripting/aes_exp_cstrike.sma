@@ -60,12 +60,14 @@ new cvar[cvars_num]
 
 /* - ADD BONUS - */
 
-enum _:STREAK_OPT
+enum _:
 {
 	STREAK_KILLS,
 	STREAK_HS,
 	STREAK_KNIFE,
-	STREAK_HE
+	STREAK_HE,
+	
+	STREAK_OPT
 }
 
 enum _:Arrays{
@@ -251,7 +253,7 @@ public client_disconnected(id)
 		arrayset(g_Players[id],0,STREAK_OPT)
 
 public client_death(killer,victim,wpn,hit,TK){
-	if(!(0 < killer <= MaxClients)|| killer == victim)
+	if((0 < killer <= MaxClients) == false || killer == victim)
 		return
 	
 	if(TK && !get_pcvar_num(cvar[CVAR_XP_FFA]))
