@@ -1486,6 +1486,20 @@ public _aes_get_exp_to_next_level(lvl)
 	return floatround(Level_GetExpToNext(lvl))
 }
 
+public plugin_precache()
+{
+	new amxx_version[10]
+	get_amxx_verstring(amxx_version,charsmax(amxx_version))
+	    
+	if(contain(amxx_version,"1.8.1") != -1)
+	{
+		log_amx("idite nahooy")
+		
+		server_cmd("quit")
+		server_exec()
+	}
+}
+
 /*********    mysql escape functions     ************/
 mysql_escape_string(dest[],len)
 {
