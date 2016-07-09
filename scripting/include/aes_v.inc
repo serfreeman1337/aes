@@ -108,7 +108,7 @@ native aes_get_max_level()
 //
 // Returns level name for level num.
 //	
-//	@lvlnum - player id
+//	@level - level number
 //	@level[] - level name output
 //	@len - len
 //	@idLang - language id
